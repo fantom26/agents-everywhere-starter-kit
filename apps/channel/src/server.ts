@@ -62,9 +62,17 @@ const channels = listener.channels;
 // separate backend for the button UI. OAuth paths are claimed first; everything
 // else goes to the listener untouched.
 const server = createServer((req, res) => {
-  void handleOAuthRequest(req, res, database).then((handled) => {
-    if (!handled) listener(req, res);
-  });
+  void handleOAuthRequest(req, res, database)
+    .then((handled) => {
+      if (!handled) listener(req, res);
+    })
+    .catch((error: unknown) => {
+      // A thrown OAuth handler must not take the process down with it, and the
+      // student is looking at a browser tab rather than a chat.
+      console.error("  oauth:", error);
+      if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Something went wrong. Go back to Telegram and try again.");
+    });
 });
 
 const stopReminders = startReminderScheduler({
