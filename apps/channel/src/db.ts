@@ -76,12 +76,37 @@ CREATE INDEX IF NOT EXISTS bookings_by_student ON bookings(student_id, status);
 CREATE INDEX IF NOT EXISTS sessions_by_start   ON sessions(starts_at);
 `;
 
+/**
+ * Columns added after the first database existed.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that is already there,
+ * so a checkout with a `practice.db` from last week would be missing these and
+ * fail at the first query. Adding them one at a time, guarded, means an old
+ * database and a fresh one end up identical without a migration framework.
+ */
+const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
+  // Google Calendar: the student's grant, and the event a booking created.
+  { table: "students", column: "google_refresh_token", type: "TEXT" },
+  { table: "students", column: "google_email", type: "TEXT" },
+  { table: "students", column: "google_connected_at", type: "TEXT" },
+  { table: "bookings", column: "google_event_id", type: "TEXT" },
+];
+
+function addMissingColumns(db: Db): void {
+  for (const { table, column, type } of ADDED_COLUMNS) {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (existing.some((row) => String(row.name) === column)) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
 export function openDb(path = dbPath()): Db {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  addMissingColumns(db);
   return db;
 }
 

@@ -38,6 +38,7 @@ import {
   type SearchFilters,
 } from "./domain";
 import { findStudentByTelegramId, linkStudent, type LinkOutcome, type Student } from "./identity";
+import { calendar } from "./calendar";
 
 /**
  * Every service answers "who is asking?" before anything else, so every result
@@ -184,6 +185,12 @@ export function book(
     { studentId: student.id, sessionId: input.sessionId, role: input.role ?? null },
     now,
   );
+
+  // After the commit, never inside it: a calendar that is slow, rate limited or
+  // unreachable must not be able to turn a booked seat into an error. Both
+  // doors reach this line, which is the whole reason the layer exists.
+  if (outcome.ok) calendar().booked(db, student.id, outcome.bookingId);
+
   return { linked: true, student, outcome };
 }
 
@@ -196,11 +203,10 @@ export function cancel(
   const student = resolveCaller(db, telegramUserId);
   if (!student) return UNLINKED;
 
-  return {
-    linked: true,
-    student,
-    outcome: cancelBooking(db, { studentId: student.id, bookingId }, now),
-  };
+  const outcome = cancelBooking(db, { studentId: student.id, bookingId }, now);
+  if (outcome.ok) calendar().cancelled(db, student.id, bookingId);
+
+  return { linked: true, student, outcome };
 }
 
 export function reschedule(
@@ -212,18 +218,22 @@ export function reschedule(
   const student = resolveCaller(db, telegramUserId);
   if (!student) return UNLINKED;
 
-  return {
-    linked: true,
-    student,
-    outcome: rescheduleBooking(
-      db,
-      {
-        studentId: student.id,
-        bookingId: input.bookingId,
-        newSessionId: input.newSessionId,
-        role: input.role,
-      },
-      now,
-    ),
-  };
+  const outcome = rescheduleBooking(
+    db,
+    {
+      studentId: student.id,
+      bookingId: input.bookingId,
+      newSessionId: input.newSessionId,
+      role: input.role,
+    },
+    now,
+  );
+
+  // A move is a cancellation and a booking, and the calendar sees it as both.
+  if (outcome.ok) {
+    calendar().cancelled(db, student.id, input.bookingId);
+    calendar().booked(db, student.id, outcome.booked.bookingId);
+  }
+
+  return { linked: true, student, outcome };
 }
