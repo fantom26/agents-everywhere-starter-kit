@@ -117,15 +117,6 @@ export async function askForContact(bot: BotLike, chatId: ChatId): Promise<void>
   });
 }
 
-/** Show the menu to a linked student, or ask an unlinked one to link. */
-export async function greet(bot: BotLike, db: Db, chatId: ChatId, telegramUserId: string): Promise<void> {
-  if (!services.isLinked(db, telegramUserId)) {
-    await askForContact(bot, chatId);
-    return;
-  }
-  await sendCard(bot, chatId, linkOrMenu(db, telegramUserId));
-}
-
 /**
  * Attach both handlers to the adapter's bot.
  *

@@ -16,7 +16,11 @@
  * finds, books, cancels and reschedules — it just stops answering sentences.
  * That is the point: the AI is the convenient way in, not the only one.
  */
-import { createChannel, type StatefulThread } from "@copilotkit/channels";
+import {
+  createChannel,
+  defineChannelCommand,
+  type StatefulThread,
+} from "@copilotkit/channels";
 import { telegram, defaultTelegramContext } from "@copilotkit/channels/telegram";
 import { resolveModel } from "agent-core";
 import { makeChannelAgent } from "./agent";
@@ -163,35 +167,71 @@ channel.onThreadStarted(async ({ thread, actor }) => {
   await askForContact(bot, telegramUserId);
 });
 
-// Slash commands, so every screen is reachable without scrolling back up the
-// chat to find an old card.
-channel.onCommand("menu", async ({ thread, actor }) => {
-  await thread.post(linkOrMenu(db(), actor?.id ?? ""));
-});
+/**
+ * Slash commands, so every screen is reachable without scrolling back up the
+ * chat to find an old card.
+ *
+ * Declared rather than attached with `channel.onCommand(name, fn)`, because a
+ * declared command carries a description and the adapter registers the set with
+ * BotFather — which is what puts them in Telegram's own menu button. `/start` is
+ * absent on purpose: the adapter suppresses it and routes it to
+ * `onThreadStarted` instead.
+ */
+const commands = [
+  defineChannelCommand({
+    name: "menu",
+    description: "Everything, in one screen",
+    async handler({ thread, actor }) {
+      await thread.post(linkOrMenu(db(), actor?.id ?? ""));
+    },
+  }),
 
-channel.onCommand("find", async ({ thread, actor }) => {
-  const linked = services.isLinked(db(), actor?.id ?? "");
-  await thread.post(
-    linked ? typePicker(services.practiceTypes(db())) : linkOrMenu(db(), actor?.id ?? ""),
-  );
-});
+  defineChannelCommand({
+    name: "find",
+    description: "Find a practice to book",
+    async handler({ thread, actor }) {
+      const telegramUserId = actor?.id ?? "";
+      await thread.post(
+        services.isLinked(db(), telegramUserId)
+          ? typePicker(services.practiceTypes(db()))
+          : linkOrMenu(db(), telegramUserId),
+      );
+    },
+  }),
 
-channel.onCommand("progress", async ({ thread, actor }) => {
-  const result = services.progressFor(db(), actor?.id ?? "");
-  await thread.post(
-    result.linked
-      ? progressCard(result.student.fullName, result.progress)
-      : linkOrMenu(db(), actor?.id ?? ""),
-  );
-});
+  defineChannelCommand({
+    name: "progress",
+    description: "How many practices you have booked this year",
+    async handler({ thread, actor }) {
+      const result = services.progressFor(db(), actor?.id ?? "");
+      await thread.post(
+        result.linked
+          ? progressCard(result.student.fullName, result.progress)
+          : linkOrMenu(db(), actor?.id ?? ""),
+      );
+    },
+  }),
 
-channel.onCommand("bookings", async ({ thread, actor }) => {
-  const result = services.bookingsFor(db(), actor?.id ?? "");
-  await thread.post(
-    result.linked ? bookingsCard(result.bookings, new Date()) : linkOrMenu(db(), actor?.id ?? ""),
-  );
-});
+  defineChannelCommand({
+    name: "bookings",
+    description: "Your upcoming practices",
+    async handler({ thread, actor }) {
+      const result = services.bookingsFor(db(), actor?.id ?? "");
+      await thread.post(
+        result.linked
+          ? bookingsCard(result.bookings, new Date())
+          : linkOrMenu(db(), actor?.id ?? ""),
+      );
+    },
+  }),
 
-channel.onCommand("help", async ({ thread }) => {
-  await thread.post(infoScreen(services.practiceTypes(db())));
-});
+  defineChannelCommand({
+    name: "help",
+    description: "The practices, the quota, and the booking rules",
+    async handler({ thread }) {
+      await thread.post(infoScreen(services.practiceTypes(db())));
+    },
+  }),
+];
+
+for (const command of commands) channel.onCommand(command);
