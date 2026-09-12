@@ -13,20 +13,12 @@
  * 2. **An action a student cannot take is not a button.** A taken mentoring
  *    role is a line of text; only free roles get a tappable "Join as…".
  */
-import {
-  Message,
-  Header,
-  Section,
-  Markdown,
-  Context,
-  Divider,
-  Actions,
-  Button,
-} from "@copilotkit/channels";
+import { Message, Header, Section, Markdown, Context, Divider } from "@copilotkit/channels";
 import type { Availability, BookingView, PracticeType, Progress } from "./domain";
 import { cb, tokenFor, type TypeToken } from "./callbacks";
 import { t, practiceTitle, roleName } from "./strings";
-import { formatKyiv, formatKyivDayShort, formatLeadTime } from "./time";
+import { keyboard } from "./keyboard";
+import { formatKyiv, formatKyivDayShort, formatKyivShort, formatLeadTime } from "./time";
 
 const ACCENT = {
   brand: "#2D6CDF",
@@ -65,13 +57,13 @@ export function mainMenu(
         </Section>
       )}
       <Context>{t.menu.hint}</Context>
-      <Actions>
-        <Button value={cb.find()}>{t.menu.find}</Button>
-        <Button value={cb.progress()}>{t.menu.progress}</Button>
-        <Button value={cb.bookings()}>{t.menu.bookings}</Button>
-        <Button value={cb.info()}>{t.menu.info}</Button>
-        {options.calendar && <Button value={cb.calendar()}>{t.calendar.menu}</Button>}
-      </Actions>
+      {keyboard([
+        { label: t.menu.find, value: cb.find() },
+        { label: t.menu.progress, value: cb.progress() },
+        { label: t.menu.bookings, value: cb.bookings() },
+        { label: t.menu.info, value: cb.info() },
+        ...(options.calendar ? [{ label: t.calendar.menu, value: cb.calendar() }] : []),
+      ])}
     </Message>
   );
 }
@@ -84,15 +76,14 @@ export function typePicker(types: PracticeType[]) {
       <Section>
         <Markdown>{t.find.chooseType}</Markdown>
       </Section>
-      <Actions>
-        {types.map((type) => (
-          <Button value={cb.findPeriod(tokenFor(type.code))}>
-            {practiceTitle(type.code, type.title)}
-          </Button>
-        ))}
-        <Button value={cb.findPeriod("all")}>{t.find.allTypes}</Button>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([
+        ...types.map((type) => ({
+          label: practiceTitle(type.code, type.title),
+          value: cb.findPeriod(tokenFor(type.code)),
+        })),
+        { label: t.find.allTypes, value: cb.findPeriod("all") },
+      ])}
+      {keyboard([{ label: t.menu.back, value: cb.menu() }])}
     </Message>
   );
 }
@@ -105,12 +96,17 @@ export function periodPicker(type: TypeToken, title: string) {
       <Section>
         <Markdown>{t.find.choosePeriod}</Markdown>
       </Section>
-      <Actions>
-        <Button value={cb.findSlots(type, "w")}>{t.find.thisWeek}</Button>
-        <Button value={cb.findSlots(type, "n")}>{t.find.nextWeek}</Button>
-        <Button value={cb.findSlots(type, "d")}>{t.find.pickDate}</Button>
-        <Button value={cb.find()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.find.thisWeek, value: cb.findSlots(type, "w") },
+          { label: t.find.nextWeek, value: cb.findSlots(type, "n") },
+        ],
+        2,
+      )}
+      {keyboard([
+        { label: t.find.pickDate, value: cb.findSlots(type, "d") },
+        { label: t.menu.back, value: cb.find() },
+      ], 2)}
     </Message>
   );
 }
@@ -129,9 +125,7 @@ export function datePicker(type: TypeToken, title: string, days: { key: string; 
         <Section>
           <Markdown>{t.find.empty}</Markdown>
         </Section>
-        <Actions>
-          <Button value={cb.findPeriod(type)}>{t.menu.back}</Button>
-        </Actions>
+        {keyboard([{ label: t.menu.back, value: cb.findPeriod(type) }])}
       </Message>
     );
   }
@@ -142,12 +136,15 @@ export function datePicker(type: TypeToken, title: string, days: { key: string; 
       <Section>
         <Markdown>{t.find.choosePeriod}</Markdown>
       </Section>
-      <Actions>
-        {days.slice(0, 8).map((day) => (
-          <Button value={cb.findOnDate(type, day.key)}>{formatKyivDayShort(day.at)}</Button>
-        ))}
-        <Button value={cb.findPeriod(type)}>{t.menu.back}</Button>
-      </Actions>
+      {/* Dates are short, so three fit a row without eliding. */}
+      {keyboard(
+        days.slice(0, 9).map((day) => ({
+          label: formatKyivDayShort(day.at),
+          value: cb.findOnDate(type, day.key),
+        })),
+        3,
+      )}
+      {keyboard([{ label: t.menu.back, value: cb.findPeriod(type) }])}
     </Message>
   );
 }
@@ -183,10 +180,10 @@ export function slotScreen(
           <Markdown>{`⚠️ ${refusal}`}</Markdown>
         </Section>
       )}
-      <Actions>
-        {!refusal && <Button value={cb.book(found.session.id)}>{t.find.bookThis}</Button>}
-        <Button value={back}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([
+        ...(refusal ? [] : [{ label: t.find.bookThis, value: cb.book(found.session.id) }]),
+        { label: t.menu.back, value: back },
+      ])}
     </Message>
   );
 }
@@ -233,14 +230,13 @@ export function roleScreen(found: Availability, back: string) {
           <Markdown>{t.roles.noneFree}</Markdown>
         </Section>
       )}
-      <Actions>
-        {free.map((role) => (
-          <Button value={cb.book(found.session.id, role.role)}>
-            {t.roles.join(roleName(role.role))}
-          </Button>
-        ))}
-        <Button value={back}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        free.map((role) => ({
+          label: t.roles.join(roleName(role.role)),
+          value: cb.book(found.session.id, role.role),
+        })),
+      )}
+      {keyboard([{ label: t.menu.back, value: back }])}
     </Message>
   );
 }
@@ -261,10 +257,13 @@ export function cancelConfirm(booking: BookingView) {
             .join("\n")}
         </Markdown>
       </Section>
-      <Actions>
-        <Button value={cb.cancelDo(booking.id)}>{t.cancelled.confirmYes}</Button>
-        <Button value={cb.bookings()}>{t.cancelled.confirmNo}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.cancelled.confirmYes, value: cb.cancelDo(booking.id) },
+          { label: t.cancelled.confirmNo, value: cb.bookings() },
+        ],
+        2,
+      )}
     </Message>
   );
 }
@@ -282,11 +281,14 @@ export function reschedulePeriodPicker(booking: BookingView) {
           ].join("\n")}
         </Markdown>
       </Section>
-      <Actions>
-        <Button value={cb.reschedulePeriod(booking.id, "w")}>{t.find.thisWeek}</Button>
-        <Button value={cb.reschedulePeriod(booking.id, "n")}>{t.find.nextWeek}</Button>
-        <Button value={cb.bookings()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.find.thisWeek, value: cb.reschedulePeriod(booking.id, "w") },
+          { label: t.find.nextWeek, value: cb.reschedulePeriod(booking.id, "n") },
+        ],
+        2,
+      )}
+      {keyboard([{ label: t.menu.back, value: cb.bookings() }])}
     </Message>
   );
 }
@@ -300,9 +302,7 @@ export function rescheduleSlots(booking: BookingView, slots: Availability[]) {
         <Section>
           <Markdown>{t.find.empty}</Markdown>
         </Section>
-        <Actions>
-          <Button value={cb.reschedule(booking.id)}>{t.menu.back}</Button>
-        </Actions>
+        {keyboard([{ label: t.menu.back, value: cb.reschedule(booking.id) }])}
       </Message>
     );
   }
@@ -321,14 +321,13 @@ export function rescheduleSlots(booking: BookingView, slots: Availability[]) {
         </Section>
       ))}
       <Context>{t.find.kyivNote}</Context>
-      <Actions>
-        {slots.slice(0, 6).map((slot, index) => (
-          <Button value={cb.rescheduleDo(booking.id, slot.session.id)}>
-            {`${index + 1}. ${formatKyivDayShort(slot.session.startsAt)}`}
-          </Button>
-        ))}
-        <Button value={cb.reschedule(booking.id)}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        slots.slice(0, 6).map((slot, index) => ({
+          label: `${index + 1} · ${formatKyivShort(slot.session.startsAt)}`,
+          value: cb.rescheduleDo(booking.id, slot.session.id),
+        })),
+      )}
+      {keyboard([{ label: t.menu.back, value: cb.reschedule(booking.id) }])}
     </Message>
   );
 }
@@ -377,9 +376,7 @@ export function infoScreen(types: PracticeType[]) {
       <Section>
         <Markdown>{`${t.info.progressRule}\n${t.info.reminderRule}`}</Markdown>
       </Section>
-      <Actions>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([{ label: t.menu.back, value: cb.menu() }])}
     </Message>
   );
 }
@@ -408,12 +405,12 @@ export function calendarScreen(state: {
         </Section>
       )}
       {state.configured && !state.connected && <Context>{t.calendar.forwardOnly}</Context>}
-      <Actions>
-        {!state.connected && state.connectUrl && (
-          <Button url={state.connectUrl}>{t.calendar.connect}</Button>
-        )}
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([
+        ...(!state.connected && state.connectUrl
+          ? [{ label: t.calendar.connect, url: state.connectUrl }]
+          : []),
+        { label: t.menu.back, value: cb.menu() },
+      ])}
     </Message>
   );
 }

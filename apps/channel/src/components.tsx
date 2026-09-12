@@ -10,7 +10,9 @@
  * card.
  *
  * On Telegram this JSX renders as HTML plus an inline keyboard; `<Fields>`
- * become bold labels and `<Actions>` become tappable buttons.
+ * become bold labels and `keyboard()` builds the tappable rows. Every card goes
+ * through that helper rather than writing `<Actions>` directly — see
+ * `keyboard.tsx` for why a row of seven buttons is unreadable.
  *
  * **Buttons carry a `value` and never an `onClick`.** A closure-bound button is
  * dispatched from an in-process registry that does not survive a restart — the
@@ -29,11 +31,10 @@ import {
   Field,
   Context,
   Divider,
-  Actions,
-  Button,
 } from "@copilotkit/channels";
+import { keyboard } from "./keyboard";
 import type { Availability, BookingView, Progress, Role } from "./domain";
-import { formatKyiv, formatLeadTime } from "./time";
+import { formatKyiv, formatKyivShort, formatLeadTime } from "./time";
 import { t, practiceTitle, roleName } from "./strings";
 import { cb } from "./callbacks";
 
@@ -62,9 +63,7 @@ export function progressCard(studentName: string, progress: Progress[]) {
         </Section>
       ))}
       <Context>{t.progress.note}</Context>
-      <Actions>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([{ label: t.menu.back, value: cb.menu() }])}
     </Message>
   );
 }
@@ -96,9 +95,14 @@ function sessionSummary(found: Availability, now: Date): string {
     .join("\n");
 }
 
-/** The short label an option button carries: "1. Tue 15 Sep". */
+/**
+ * The label an option button carries: "1 · Tue 15 Sep, 18:30".
+ *
+ * One line, one row. Telegram divides a row's width between its buttons and
+ * elides what does not fit, so a long label in a crowded row shows as "1....r".
+ */
 function optionLabel(index: number, found: Availability): string {
-  return `${index + 1}. ${formatKyiv(found.session.startsAt).split(",").slice(0, 2).join(",").trim()}`;
+  return `${index + 1} · ${formatKyivShort(found.session.startsAt)}`;
 }
 
 /**
@@ -125,9 +129,7 @@ export function sessionOptions(
         <Section>
           <Markdown>{t.find.empty}</Markdown>
         </Section>
-        <Actions>
-          <Button value={back}>{t.menu.back}</Button>
-        </Actions>
+        {keyboard([{ label: t.menu.back, value: back }])}
       </Message>
     );
   }
@@ -142,22 +144,17 @@ export function sessionOptions(
       ))}
       <Divider />
       <Context>{t.find.kyivNote}</Context>
-      <Actions>
-        {found.slice(0, 6).map((session, index) => (
-          <Button
-            value={
-              // A role-based practice needs the role picked first, so its button
-              // opens the session rather than booking it outright.
-              session.type.roleBased
-                ? cb.session(session.session.id)
-                : cb.book(session.session.id)
-            }
-          >
-            {optionLabel(index, session)}
-          </Button>
-        ))}
-        <Button value={back}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        found.slice(0, 6).map((session, index) => ({
+          label: optionLabel(index, session),
+          // A role-based practice needs the role picked first, so its button
+          // opens the session rather than booking it outright.
+          value: session.type.roleBased
+            ? cb.session(session.session.id)
+            : cb.book(session.session.id),
+        })),
+      )}
+      {keyboard([{ label: t.menu.back, value: back }])}
     </Message>
   );
 }
@@ -210,10 +207,13 @@ export function bookingConfirmation(
         </Section>
       )}
       <Context>{t.booked.reminderNote(opts.bookingId)}</Context>
-      <Actions>
-        <Button value={cb.bookings()}>{t.menu.bookings}</Button>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.menu.bookings, value: cb.bookings() },
+          { label: t.menu.back, value: cb.menu() },
+        ],
+        2,
+      )}
     </Message>
   );
 }
@@ -233,10 +233,13 @@ export function bookingsCard(bookings: BookingView[], now: Date, opts: { withAct
         <Section>
           <Markdown>{t.bookings.empty}</Markdown>
         </Section>
-        <Actions>
-          <Button value={cb.find()}>{t.menu.find}</Button>
-          <Button value={cb.menu()}>{t.menu.back}</Button>
-        </Actions>
+        {keyboard(
+          [
+            { label: t.menu.find, value: cb.find() },
+            { label: t.menu.back, value: cb.menu() },
+          ],
+          2,
+        )}
       </Message>
     );
   }
@@ -261,19 +264,23 @@ export function bookingsCard(bookings: BookingView[], now: Date, opts: { withAct
         </Section>
       ))}
       <Context>{t.find.kyivNote}</Context>
-      {withActions && (
-        <Actions>
-          {bookings.slice(0, 3).flatMap((booking, index) => [
-            <Button value={cb.cancelAsk(booking.id)}>
-              {`${index + 1}. ${t.bookings.cancel}`}
-            </Button>,
-            <Button value={cb.reschedule(booking.id)}>
-              {`${index + 1}. ${t.bookings.reschedule}`}
-            </Button>,
-          ])}
-          <Button value={cb.menu()}>{t.menu.back}</Button>
-        </Actions>
-      )}
+      {/* One row per booking: its Cancel and its Reschedule, side by side. */}
+      {withActions &&
+        bookings
+          .slice(0, 3)
+          .map((booking, index) =>
+            keyboard(
+              [
+                { label: `${index + 1} · ${t.bookings.cancel}`, value: cb.cancelAsk(booking.id) },
+                {
+                  label: `${index + 1} · ${t.bookings.reschedule}`,
+                  value: cb.reschedule(booking.id),
+                },
+              ],
+              2,
+            ),
+          )}
+      {withActions && keyboard([{ label: t.menu.back, value: cb.menu() }])}
     </Message>
   );
 }
@@ -289,10 +296,13 @@ export function cancellationCard(booking: BookingView) {
         <Field label={t.booked.when}>{`${formatKyiv(booking.session.startsAt)} (Kyiv)`}</Field>
       </Fields>
       <Context>{t.cancelled.note}</Context>
-      <Actions>
-        <Button value={cb.find()}>{t.menu.find}</Button>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.menu.find, value: cb.find() },
+          { label: t.menu.back, value: cb.menu() },
+        ],
+        2,
+      )}
     </Message>
   );
 }
@@ -312,10 +322,13 @@ export function rescheduleCard(from: BookingView, to: Availability, role: Role |
         {role && <Field label={t.booked.roleLabel}>{roleName(role)}</Field>}
         <Field label={t.booked.zoom}>{to.session.zoomUrl}</Field>
       </Fields>
-      <Actions>
-        <Button value={cb.bookings()}>{t.menu.bookings}</Button>
-        <Button value={cb.menu()}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard(
+        [
+          { label: t.menu.bookings, value: cb.bookings() },
+          { label: t.menu.back, value: cb.menu() },
+        ],
+        2,
+      )}
     </Message>
   );
 }
@@ -333,9 +346,7 @@ export function reminderCard(booking: BookingView) {
         <Field label={t.reminder.trainerLabel}>{booking.session.trainer}</Field>
         {booking.role && <Field label={t.reminder.yourRole}>{roleName(booking.role)}</Field>}
       </Fields>
-      <Actions>
-        <Button url={booking.session.zoomUrl}>{t.reminder.join}</Button>
-      </Actions>
+      {keyboard([{ label: t.reminder.join, url: booking.session.zoomUrl }])}
     </Message>
   );
 }
@@ -379,9 +390,7 @@ export function refusalCard(message: string, back: string) {
       <Section>
         <Markdown>{`⚠️ ${message}`}</Markdown>
       </Section>
-      <Actions>
-        <Button value={back}>{t.menu.back}</Button>
-      </Actions>
+      {keyboard([{ label: t.menu.back, value: back }])}
     </Message>
   );
 }

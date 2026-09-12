@@ -137,9 +137,21 @@ export function formatKyiv(instant: Date): string {
   return `${WEEKDAY.format(instant)}, ${DAY_MONTH.format(instant)}, ${pad(hour)}:${pad(minute)}`;
 }
 
-/** The label a date button carries. */
+/** The label a date button carries: "Tue 15 Sep". */
 export function formatKyivDayShort(instant: Date): string {
   return SHORT_DAY.format(instant);
+}
+
+/**
+ * A session, short enough for a button: "Tue 15 Sep, 18:30".
+ *
+ * The time is not decoration — two sessions of the same practice often share a
+ * day, and the label is all a student has to tell them apart.
+ */
+export function formatKyivShort(instant: Date): string {
+  const { hour, minute } = kyivWallClock(instant);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${SHORT_DAY.format(instant)}, ${pad(hour)}:${pad(minute)}`;
 }
 
 /** "in 3 h 20 min" — how far away a session is, for the 24-hour rule. */

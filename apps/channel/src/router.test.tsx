@@ -30,6 +30,11 @@ beforeEach(() => {
   linkStudent(db, TG, "+380501112233");
 });
 
+/** The inline keyboard as Telegram receives it: rows of buttons. */
+function rowsOf(rendered: Rendered) {
+  return renderTelegram(renderToIR(rendered.card as never)).inlineKeyboard ?? [];
+}
+
 /** What Telegram would show for a screen. */
 function shown(card: Rendered["card"] | Rendered) {
   const node = "card" in (card as Rendered) ? (card as Rendered).card : card;
@@ -262,6 +267,55 @@ describe("what Telegram receives", () => {
           );
         }
       }
+    }
+  });
+
+  it("never puts so many buttons in one row that Telegram elides the labels", () => {
+    // Telegram divides a row's width between its buttons. Seven in a row is
+    // seven slivers reading "1....r", which is what this guards against: the
+    // renderer packs one <Actions> block into rows of eight, so a screen must
+    // emit a block per row.
+    const screens: [string, Rendered][] = [
+      ["menu", tap(cb.menu())],
+      ["find", tap(cb.find())],
+      ["period", tap(cb.findPeriod("all"))],
+      ["slots", tap(cb.findSlots("all", "n"))],
+      ["dates", tap(cb.findSlots("inter", "d"))],
+      ["roles", tap(cb.session(seed.mentoringSessionId))],
+      ["progress", tap(cb.progress())],
+      ["bookings", tap(cb.bookings())],
+      ["info", tap(cb.info())],
+    ];
+
+    for (const [name, rendered] of screens) {
+      for (const row of rowsOf(rendered)) {
+        assert.ok(row.length <= 3, `${name} has a row of ${row.length} buttons`);
+
+        // A row shares its width, so the longest label in it is what gets cut.
+        const widest = Math.max(...row.map((button) => button.text.length));
+        assert.ok(
+          widest * row.length <= 60,
+          `${name}: ${row.length} buttons with a ${widest}-character label will not fit`,
+        );
+      }
+    }
+  });
+
+  it("gives a session button a label that says which session it is", () => {
+    const rendered = tap(cb.findSlots("inter", "n"));
+    const labels = shown(rendered)
+      .buttons.filter((button) => {
+        const action = decode(button.callbackData);
+        return action?.kind === "book" || action?.kind === "session";
+      })
+      .map((button) => button.text);
+
+    assert.ok(labels.length > 0);
+    for (const label of labels) {
+      // "1 · Tue 15 Sep, 18:30" — a day and a time, because two sessions of one
+      // practice often share a day.
+      assert.match(label, /\d{2}:\d{2}/, `"${label}" does not say when`);
+      assert.ok(label.length <= 30, `"${label}" is too long for a row`);
     }
   });
 

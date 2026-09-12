@@ -45,6 +45,16 @@ const TELEGRAM_USER_ID = "424242";
 const database = db();
 const seed = seedDatabase(database);
 
+/** Print an inline keyboard the way Telegram lays it out: one line per row. */
+function printKeyboard(rows: { text: string; url?: string }[][] | undefined) {
+  for (const row of rows ?? []) {
+    if (row.length === 0) continue;
+    console.log(
+      indent(row.map((button) => `[ ${button.text}${button.url ? ` \u2192 ${button.url}` : ""} ]`).join(" ")),
+    );
+  }
+}
+
 /** Renders a posted card the way the adapter would, then prints it. */
 const posted: string[] = [];
 const thread = {
@@ -143,12 +153,8 @@ function taps(label: string, payload: string) {
   console.log(`\n\x1b[36m   [tap]\x1b[0m ${label}  \x1b[2m(${payload})\x1b[0m`);
   const rendered = route(database, TELEGRAM_USER_ID, payload);
   const out = renderTelegram(renderToIR(rendered.card as never));
-  const keyboard = (out.inlineKeyboard ?? [])
-    .flat()
-    .map((button) => `[ ${button.text}${button.url ? ` \u2192 ${button.url}` : ""} ]`)
-    .join(" ");
   console.log(indent(htmlToTerminal(out.text)));
-  if (keyboard) console.log(indent(keyboard));
+  printKeyboard(out.inlineKeyboard);
   return rendered;
 }
 
