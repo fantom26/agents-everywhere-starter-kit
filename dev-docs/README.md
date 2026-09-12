@@ -1,19 +1,26 @@
 # Developer resources
 
-Start with the [hackathon homepage](../README.md), choose a [template](../README.md#templates), and give your coding agent the [overview](../hackathon-overview.md), [rules](../hackathon-rules.md), and [sponsor tool guide](../using-sponsor-tools.md).
+> **Note for this repository.** These are the starter kit's original developer
+> docs, kept because they still describe the CopilotKit Channels, Intelligence,
+> and model machinery that Practice Agent runs on. They were written for the
+> kit's Slack/web/mobile templates, so they refer to `npm run dev:slack` and
+> `npm run dev:web`, which no longer exist here — the equivalent is
+> **`npm run dev:telegram`**. Start at [the project README](../README.md) and
+> [apps/channel/README.md](../apps/channel/README.md); read
+> [AGENTS.md](../AGENTS.md) if you are a coding agent.
 
 | Doc | When you need it |
 |---|---|
-| [Sponsor tool guide](../using-sponsor-tools.md) | Authentication, configuration, and a first working call for each featured sponsor |
-| [Auth0 protected API recipe](auth0/README.md) | Optional machine-to-machine authorization reference for a protected local API |
-| [Channels screenshot walkthrough](channels-sdk-walkthrough/README.md) | Intelligence, Slack installation, runtime, and a verified native-card conversation |
-| [Setup](setup.md) | Getting from clone to a first Slack or web reply |
-| [Channels](channels.md) | How managed delivery works and Slack/Teams setup order |
-| [Surfaces](surfaces.md) | Retained Slack, web, mobile, and web voice entry points |
-| [React Native template](../apps/mobile/README.md) | Expo setup, runtime URL choices, native tool rendering, and approval boundaries |
-| [Model switching](model-switching.md) | Choosing OpenAI or OpenRouter and understanding provider precedence |
+| [Setup](setup.md) | Creating a Channel in Intelligence and getting to a first reply |
+| [Channels](channels.md) | How the Channels SDK and managed delivery work |
 | [Tools and context](tools-and-context.md) | CopilotKit Channels tools, native UI, and action proposals |
-| [Deployment](deploy.md) | Hosting the chosen surface |
-| [Demo prompts](demo-prompts.md) | Reproducible reference interactions to adapt |
-| [Troubleshooting](troubleshooting.md) | Diagnosing setup and runtime failures |
+| [Troubleshooting](troubleshooting.md) | Diagnosing Channel setup and runtime failures |
+| [Model switching](model-switching.md) | Choosing OpenAI or OpenRouter and understanding provider precedence |
+| [Deployment](deploy.md) | Hosting a long-running Channel process |
+| [Sponsors](sponsors.md) | The event's sponsor lineup |
+| [Sponsor tool guide](../using-sponsor-tools.md) | Authentication and a first working call per sponsor |
 | [Submission checklist](../SUBMISSION.md) | Preparing evidence and deliverables |
+
+Removed with the kit's other templates: the Auth0 recipe, the Slack screenshot
+walkthrough, the React Native docs, the surfaces table, and the incident demo
+prompts. See [SUBMISSION.md](../SUBMISSION.md#what-we-inherited).

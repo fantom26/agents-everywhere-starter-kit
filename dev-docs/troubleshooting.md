@@ -100,7 +100,7 @@ Search and invalid-source failures post a visible failure notice and preserve th
 
 A delivered card alone does not prove the same Channel turn can continue after a tool result. With the pinned Channels/runtime pair, the run loop can re-enter the agent as soon as the previous observable completes. CopilotKit's `BuiltInAgent` clears its internal abort controller later, during async cleanup, so reusing the same inner instance can throw `Agent is already running. Call abortRun() first or create a new instance.` before the follow-up answer or status clear is delivered.
 
-The Slack template wraps the shared `makeAgent` factory with `ChannelRunAgent` in `apps/channel/src/agent.ts`. The wrapper keeps the public AG-UI transcript, state, subscribers, clone behavior, and cancellation on the outer agent, but delegates each low-level `run(input)` to a fresh inner `BuiltInAgent`. This is scoped to Channels; web and mobile continue using the shared factory directly.
+The Slack template wraps the shared `makeAgent` factory with `ChannelRunAgent` in `apps/channel/src/agent/agent.ts`. The wrapper keeps the public AG-UI transcript, state, subscribers, clone behavior, and cancellation on the outer agent, but delegates each low-level `run(input)` to a fresh inner `BuiltInAgent`. This is scoped to Channels; web and mobile continue using the shared factory directly.
 
 Run `npm test --workspace channel` to exercise the local lifecycle regression: a real `BuiltInAgent` reproduces the same-tick continuation guard, the channel wrapper continues with tool-result transcript and state intact, and cancellation/teardown are forwarded to the active inner agent. That test proves the local lifecycle boundary only. Actual Slack delivery still requires a live managed Channel run; preserve raw runtime stdout/stderr and Intelligence delivery traces when checking source cards, final answers, and a cleared working indicator.
 
@@ -139,7 +139,7 @@ That is why this kit tests with **`node:test`**, Node's built-in runner: no
 install, no peer conflict, and `mock.fn()` covers what `vi.fn()` was doing.
 
 ```bash
-npm test          # node --import tsx --test 'src/**/*.test.tsx'
+npm test          # node --import tsx --test 'tests/**/*.test.tsx'
 ```
 
 If you genuinely need vitest, `--legacy-peer-deps` gets you past it — put it in

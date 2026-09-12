@@ -1,5 +1,11 @@
 # Using sponsor tools
 
+> **Note for this repository.** This is the starter kit's original documentation,
+> kept for reference and provenance. Practice Agent uses only the Telegram
+> channel (`apps/channel`); `apps/web`, `apps/mobile`, and the Exa / Ambiguous /
+> Auth0 integrations were removed, so links below that point into them no longer
+> resolve. See [SUBMISSION.md](SUBMISSION.md) and [AGENTS.md](AGENTS.md).
+
 One setup reference for the six sponsors featured in this kit. Choose the tools your workflow needs. **OpenAI** is the marquee sponsor; **CopilotKit and OpenRouter** share the next tier; **Exa, Auth0, and Ambiguous AI** provide additional capabilities. This is the kit's selected lineup; the [global event page](https://aitinkerers.org/hackathons/global/agents-everywhere) maintains the full event roster and links to each city's event.
 
 Use Node.js 22+. For Slack/web/mobile, run the homepage's clone/install steps and keep credentials in root `.env`. Never put keys in frontend code or a submission. `npm run verify` covers offline behavior, not live account access.

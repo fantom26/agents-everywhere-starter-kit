@@ -1,5 +1,11 @@
 # Hackathon overview
 
+> **Note for this repository.** This is the starter kit's original documentation,
+> kept for reference and provenance. Practice Agent uses only the Telegram
+> channel (`apps/channel`); `apps/web`, `apps/mobile`, and the Exa / Ambiguous /
+> Auth0 integrations were removed, so links below that point into them no longer
+> resolve. See [SUBMISSION.md](SUBMISSION.md) and [AGENTS.md](AGENTS.md).
+
 Read this before choosing a template or writing a project plan. Read [hackathon-rules.md](hackathon-rules.md) before deciding what to reuse or submit.
 
 ## Challenge

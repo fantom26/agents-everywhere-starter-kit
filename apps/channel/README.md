@@ -1,80 +1,208 @@
-# Slack thread agent
+# Practice Agent — a practice coordinator inside Telegram
 
-**OpenAI + CopilotKit Channels + Exa**
+**Telegram buttons + OpenAI + CopilotKit Channels + SQLite + Google Calendar**
 
-Build an agent that reads an existing conversation, researches what matters, and replies in the same Slack thread with native cards and source links. Try a team research discussion, support handoff, project decision, or incident review. The included incident scenario shows how the infrastructure fits together; replace it with your own workflow.
+Students at a coaching school have to complete a set number of educational
+practices each year. Working out which ones they still need, which sessions have
+a seat, whether a mentoring role is free, and whether they are even allowed to
+take an extra session is more than a calendar can express — so it usually turns
+into messages to a coordinator.
 
-[![Slack thread agent demo](../../assets/demos/slack.gif)](../../assets/demos/slack.mp4)
+Practice Agent is that coordinator, living in the Telegram chat students already
+use. **The whole product works by tapping buttons.** The AI is a second door onto
+the same system, for students who would rather say what they want than tap
+through to it.
 
-_Scroll through a completed Slack thread: incident context, Exa source cards, and the final answer. The preview is sped up; click it for the full MP4._
+```
+/start                              «I need a practice next week after 18:00»
+
+  Practice Agent                      → search_available_practices(…)
+  Hi, Olena.                          ┌ Available sessions ─────────────────
+  • Intermodule meeting — 1 / 6       │ 1. Intermodule meeting
+                                      │    Sunday, 13 September, 18:30 (Kyiv)
+  [📅 Find practice]                  │    Trainer: Serhii · 10 of 10 free
+  [📊 My progress]                    └ [ 1. Sunday, 13 ] [ 2. Tuesday, 15 ]
+  [📚 My bookings]
+  [ℹ️ Information]                   Both buttons book through the same
+                                      service, with the same rules.
+```
+
+Both doors meet in one place:
+
+```
+buttons ──→ router.tsx ──┐
+                         ├──→ services.ts ──→ domain.ts ──→ SQLite
+the agent ──→ tools.tsx ─┘
+```
+
+`domain.ts` owns every booking rule. `services.ts` adds identity and nothing
+else. Neither door has a copy of a rule, and `parity.test.tsx` fails if one ever
+grows one.
+
+## Why Telegram
+
+Remove Telegram and three things break. Nobody opens a booking website an hour
+before a session, so the reminder — the feature that actually stops people
+missing practices — has nowhere to arrive. "Book me for Wednesday" only resolves
+because the options from the previous turn are still in the conversation. And the
+student is already identified: they linked once, with Telegram's own contact
+button, and never log in again.
 
 ## Get started
 
-Complete the [root clone/install steps](../../README.md#get-started), then configure `.env` with [OpenAI](../../using-sponsor-tools.md#openai), [CopilotKit Intelligence](../../using-sponsor-tools.md#copilotkit), and [Exa](../../using-sponsor-tools.md#exa):
+Complete the [root clone/install steps](../../README.md#get-started), then
+configure `.env`:
 
 ```dotenv
 MODEL_PROVIDER=openai
 OPENAI_API_KEY=your-key
 MODEL=gpt-5.6-sol
+
+TELEGRAM_BOT_TOKEN=123456:ABC-your-token-from-BotFather
 CHANNEL_CODE=your-channel-code
 INTELLIGENCE_API_KEY=your-project-key
-EXA_API_KEY=your-key
-EXA_SEARCH_TYPE=fast
 ```
 
-Choose an OpenAI model available to your account. Start the official onboarding handoff:
+1. **Bot token** — open [@BotFather](https://t.me/BotFather) in Telegram, send
+   `/newbot`, and copy the token it gives you.
+2. **Channel** — the runtime owns the Channel lifecycle even on the direct
+   adapter path, so a Channel still has to exist in
+   [CopilotKit Intelligence](https://intelligence.copilotkit.ai/). Create one and
+   copy its Code into `CHANNEL_CODE`.
+
+**The model key is optional.** Leave `OPENAI_API_KEY` unset and every button
+flow still works — finding, booking, progress, bookings, cancelling,
+rescheduling, roles. Only free-text messages stop being answered.
+
+Google Calendar is optional too; see the block in
+[`.env.example`](../../.env.example). Without it the calendar entry does not
+appear and nothing is written anywhere.
 
 ```bash
-npm run channel:setup -- --no-clipboard
+npm run dev:telegram
 ```
 
-This installs the maintained `channels-setup` skill and prints a prompt. Give that prompt to your coding agent in this checkout and specify **Slack**, using the existing `apps/channel` app. Have the agent follow the skill through sign-in, project/Channel configuration, Slack installation, and a real reply. The command alone does not create the Channel. Keep existing `.env` values; the listener reads `CHANNEL_CODE` and `INTELLIGENCE_API_KEY`. The [shared onboarding notes](../../README.md#copilotkit-onboarding) explain CLI credential naming; the [setup guide](../../dev-docs/setup.md) and [screenshot walkthrough](../../dev-docs/channels-sdk-walkthrough/README.md) provide manual reference.
-
-```bash
-npm run dev:slack
-```
-
-Invite the bot to a Slack channel and mention it in a populated thread. CopilotKit Intelligence manages the Slack connection; this listener needs no public tunnel or Slack app token on the managed path.
+The database is created and seeded on first run. Then open Telegram, find your
+bot, and send `/start`.
 
 ## Try the flow
 
-1. Add two or three facts to a Slack thread before mentioning the agent.
-2. Ask it to catch up using the thread and render a card. Verify facts came from earlier messages rather than your last prompt.
-3. Ask it to research a related question with Exa. `search_web` posts native **Search sources** cards when sources are returned; open the links and separate published evidence from facts in your thread.
-4. Ask a follow-up that relies on the discussion. Check the answer and card remain in the same thread.
+Do the first six **with no `OPENAI_API_KEY` at all** — that is the point.
 
-Use [demo prompts](../../dev-docs/demo-prompts.md#slack-context-sources-card-follow-up) for exact incident inputs. If you add an external write, enforce approval in code before that write. The included proposal card records a decision without executing a production action.
+1. Send `/start`. Tap **📱 Share my phone number**. Telegram sends a verified
+   number, the account links, and your progress appears.
+2. Send `/start` again. You get the menu — **no phone number, ever again**.
+   Restart the process and send it once more; still the menu.
+3. **📅 Find practice → Group mentoring → This week**, then open a session whose
+   coach seat is taken. `Coach ❌ occupied` is text; only the free roles are
+   buttons. Tap **Join as Client**.
+4. **📊 My progress** — the count went up. **📚 My bookings → Cancel → Yes** —
+   it went back down.
+5. Book intermodule meetings until the annual requirement is met, then try one
+   more **more than 24 hours away**. Refused, with the time it becomes bookable.
+   Try one **inside 24 hours** — allowed, and the card says it is beyond the
+   requirement.
+6. **📚 My bookings → Reschedule** onto the full session. It fails and you keep
+   the seat you had.
+7. Now add `OPENAI_API_KEY` and type **“Find me a practice next week after
+   18:00”**. The options come back as the same card, and tapping one books
+   through the same router as step 3.
 
-## Customize these files
+To see the whole thing without a bot token or an API key:
+
+```bash
+npm run demo --workspace channel
+```
+
+That walks the button product first — menu, find, book, progress, cancel, the
+mentoring roles screen — then the same system through the agent's tools, against
+a real database, printed through the real Telegram renderer.
+
+## How it is put together
 
 | Piece | File |
-|---|---|
-| Agent and model | [Shared agent factory](../../packages/agent-core/src/agent.ts), using CopilotKit's built-in agent |
-| Channel lifecycle | [src/channel.tsx](src/channel.tsx): mention, subscribe, respond to subscribed messages |
-| Channel-only run adapter | [src/agent.ts](src/agent.ts): keeps outer transcript/state while using fresh inner agent runs |
-| Thread context and research | [src/tools.tsx](src/tools.tsx) and [src/search.tsx](src/search.tsx): `read_thread` and Exa-backed `search_web` |
-| Native cards | [src/components.tsx](src/components.tsx): incident card and timeline via Channels JSX |
-| Prompt | [Shared prompt](../../packages/agent-core/src/prompt.ts) |
+| --- | --- |
+| Booking rules — capacity, duplicates, quota, 24-hour rule, roles | [src/services/domain.ts](src/services/domain.ts) |
+| Application services — the layer both doors call | [src/services/index.ts](src/services/index.ts) |
+| Schema and the constraints SQLite enforces itself | [src/db/schema.ts](src/db/schema.ts) |
+| Connections and transactions | [src/db/client.ts](src/db/client.ts) |
+| Button payload grammar | [src/bot/callbacks.ts](src/bot/callbacks.ts) |
+| Button screens | [src/bot/messages/screens.tsx](src/bot/messages/screens.tsx) |
+| Button router: a tap in, a screen out | [src/bot/handlers/router.tsx](src/bot/handlers/router.tsx) |
+| Contact sharing and callback routing, on the raw bot | [src/bot/handlers/telegram.ts](src/bot/handlers/telegram.ts) |
+| The agent's tools | [src/agent/tools/](src/agent/tools/) |
+| The agent and its brief | [src/agent/agent.ts](src/agent/agent.ts), [src/agent/prompt.ts](src/agent/prompt.ts) |
+| Cards, built from data that was just read | [src/bot/messages/components.tsx](src/bot/messages/components.tsx) |
+| Every user-facing string | [src/bot/messages/strings.ts](src/bot/messages/strings.ts) |
+| Telegram wiring and message handlers | [src/bot/channel.tsx](src/bot/channel.tsx) |
+| Google Calendar sync and the consent round trip | [src/services/calendar.ts](src/services/calendar.ts), [src/services/google-oauth.ts](src/services/google-oauth.ts) |
+| One-hour reminder scheduler | [src/services/reminders.ts](src/services/reminders.ts) |
+| Identity and phone normalisation | [src/services/identity.ts](src/services/identity.ts) |
+| Kyiv time | [src/time.ts](src/time.ts) |
+| Roster, practice types, demo sessions | [src/db/seed.ts](src/db/seed.ts) |
+| Runtime lifecycle, seeding, OAuth routes, scheduler | [src/index.ts](src/index.ts) |
+| Tests | [tests/](tests/) |
 
-OpenRouter can be used as the model gateway through the shared provider settings in [using-sponsor-tools.md](../../using-sponsor-tools.md#openrouter). Teams or another messaging platform can reuse the Channels pattern, but this starter app is wired for managed Slack.
+### Where the line sits
 
-## Give this to your coding agent
+The model handles intent, context, tool choice, and the sentence it replies
+with. It decides nothing about whether a booking is allowed — and it is not
+required for anything:
 
-```text
-Read the root hackathon overview, rules, sponsor guide, and AGENTS.md.
-Read .agents/skills/build-channels-agent/SKILL.md before changing Slack code.
-If Slack is not connected, run npm run channel:setup -- --no-clipboard
-from the repository root and follow its prompt using the channels-setup
-skill. Select Slack and connect the existing apps/channel app.
-Adapt apps/channel to our project's user and conversation. Preserve
-read_thread, use Exa when research helps, and render results with Channels JSX.
-Replace incident-specific schemas, tools, and prompts with our own workflow.
-Demonstrate that earlier messages change the answer and return source links.
-Run npm run verify and document the live Slack checks separately.
-```
+- **Two doors, one rulebook.** Buttons and the agent both call `services.ts`.
+  `parity.test.tsx` runs every refusal scenario through both and asserts the same
+  machine reason, the same sentence to the student, and the same rows left
+  behind.
+- **No tool takes a student id.** Every tool resolves the caller from the
+  Telegram actor id stamped at ingress, so nothing the model writes can book a
+  seat for somebody else. No button payload names a student either.
+- **The prompt contains no numbers.** Capacities, quotas, the 24-hour threshold
+  and the role counts appear only in `domain.ts` and reach the model as tool
+  results. The Information screen reads them from SQLite for the same reason.
+- **Cards are built by whatever just read the data**, so a card cannot show a
+  session, time, or free seat SQLite never returned.
+- **An action a student cannot take is never a button.** A taken mentoring role
+  is a line of text.
+- **SQLite enforces what SQLite can.** Partial unique indexes make a duplicate
+  booking and a second coach impossible rather than merely unlikely, and every
+  booking runs inside `BEGIN IMMEDIATE` so a capacity check cannot race an
+  insert.
+
+### Why the buttons are routed by hand
+
+`channel.onInteraction(id, fn)` matches callback ids by exact string equality,
+which cannot express `book:17`, and a `<Button onClick>` is dispatched from an
+in-process registry that does not survive a restart — under `npm run dev`'s
+`--watch`, those buttons break on every file save. So buttons carry a `value`
+only, and a grammY `callback_query` handler parses it. All navigation state
+lives in the payload, so a card posted before a restart still works afterwards.
+
+Cards are still authored as Channels JSX and rendered with `renderTelegram` —
+the same path `reminders.ts` uses. Nothing here hand-builds Telegram JSON.
 
 ## Verify and limits
 
-Run `npm run verify` for root/channel typechecks and offline tests. Live Slack delivery, Exa search, and model responses require your own accounts and should be documented separately from local tests.
+```bash
+npm run verify                    # typecheck + tests, from the root
+npm run demo --workspace channel  # the whole flow, rendered
+```
 
-Keep the pinned Channels/runtime pair and the `@ag-ui/client` override. The [Channels skill](../../.agents/skills/build-channels-agent/SKILL.md) supplies the verified API vocabulary. [Channels guide](https://copilotkit.ai/channels-guide.md) · [OpenTag reference app](https://github.com/CopilotKit/OpenTag)
+106 tests cover the rules, both doors and their parity, the callback grammar,
+the Kyiv conversions, linking, the calendar sync, and the Telegram rendering —
+all offline. Live Telegram delivery, model responses and Google Calendar need
+your own credentials.
+
+Known limits:
+
+- Conversation history is in-memory and is lost when the process restarts.
+  Bookings, progress, the roster and the Telegram links are in SQLite and are
+  not. Button navigation is stateless and survives a restart.
+- Calendar sync is one-way and forward-only: bookings made before a student
+  connected stay where they are.
+- The Google consent page opens on the student's phone, so `PUBLIC_BASE_URL`
+  must be reachable from it — a tunnel during a demo.
+- A single process holds the bot connection, so this cannot be deployed
+  serverless.
+
+[Channels skill](../../.agents/skills/build-channels-agent/SKILL.md) ·
+[Channels guide](https://copilotkit.ai/channels-guide.md)

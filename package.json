@@ -3,23 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Starter kit for the Agents, Everywhere: Bots, Channels & More global hackathon.",
+  "description": "Practice Agent — an AI practice coordinator inside Telegram. Built on the Agents, Everywhere starter kit.",
   "license": "MIT",
   "engines": {
     "node": ">=22"
   },
   "workspaces": [
     "packages/*",
-    "apps/channel",
-    "apps/web"
+    "apps/channel"
   ],
   "scripts": {
-    "dev": "npm run dev:web",
-    "dev:slack": "npm run dev --workspace channel",
+    "dev": "npm run dev:telegram",
+    "dev:telegram": "npm run dev --workspace channel",
+    "seed": "npm run seed --workspace channel",
+    "demo": "npm run demo --workspace channel",
     "channel:status": "npx copilotkit@latest channels status --json",
     "channel:setup": "npx copilotkit@latest channels setup",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:web": "npm run dev --workspace web",
     "test": "npm run test --workspaces --if-present",
     "verify": "npm run typecheck && npm test"
   },
