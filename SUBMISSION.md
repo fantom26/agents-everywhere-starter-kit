@@ -19,14 +19,14 @@ From it, unchanged or nearly so:
 
 | Inherited | What it does | Our change |
 |---|---|---|
-| `packages/agent-core/` | Shared model adapter and `makeAgent` factory | none |
+| `packages/agent-core/` | Shared model adapter and `makeAgent` factory | trimmed to `makeAgent` + `resolveModel`; the incident prompt, Exa and Ambiguous capabilities, and the mobile prompt were removed once `apps/web` went |
 | `apps/channel/src/agent.ts` — the `ChannelRunAgent` class | Gives each turn a fresh inner agent so Channels' re-entry guard is not tripped | none; we changed only the 6-line `makeChannelAgent` factory below it, to pass our prompt and switch the workplace MCP tools off |
 | `apps/channel/src/agent-factory.test.tsx` | Tests that inherited class | none |
 | `apps/channel/src/env.ts` | Required-variable helper | error text only |
 | `apps/channel/src/server.ts` | Runtime lifecycle: teardown-before-listener ordering, `ready()`, the status gate | kept the structure; added seeding and the scheduler, and softened the status gate for the direct-adapter path |
 | Root tooling | Workspaces, TypeScript config, the `@ag-ui/client` override | none |
 | `@copilotkit/channels`, `@copilotkit/channels/telegram`, `@copilotkit/runtime` | The Channels engine, its Telegram adapter (grammY), and the runtime | used as published |
-| `apps/web/`, `apps/mobile/` | The kit's other two templates | untouched; not part of this project |
+| `apps/web/`, `apps/mobile/` | The kit's other two templates | **removed** as unused, with their demo media and walkthrough docs — see the `chore: remove unused starter-kit templates` commit. Never part of this project. |
 
 Launching or renaming the kit's incident demo would not be a project. We removed
 it: the incident tools, cards, prompt, Exa search, and their tests are gone
@@ -96,8 +96,7 @@ somewhere they do not otherwise go.
 | **CopilotKit** | Channels runs the agent in Telegram: its `@copilotkit/channels/telegram` adapter (grammY) handles ingress, renders our JSX cards as Telegram HTML and inline keyboards, and routes button clicks |
 
 Not used, deliberately: **Exa** (the agent must never state a fact it did not
-read from its own database, so it has no web search at all), **Ambiguous AI**
-(web-template only), **Auth0** (students authenticate by being a known
+read from its own database, so it has no web search at all), **Ambiguous AI**, **Auth0** (students authenticate by being a known
 `telegram_user_id`).
 
 ## Evidence for the judging criteria
@@ -131,7 +130,7 @@ Worth saying out loud in the demo, because it is the technical argument:
 
 - [x] A new participant can run the quickstart from a clean clone — see [apps/channel/README.md](apps/channel/README.md)
 - [x] The README lists the credentials and separate processes required
-- [x] `npm run verify` passes — 120 tests across three workspaces, 0 failures
+- [x] `npm run verify` passes — 86 tests across both workspaces, 0 failures
 - [x] `.env` is gitignored; no tokens in the repo
 - [x] Sample data is labeled: the roster, practice types, and sessions in `seed.ts` are fictional, generated relative to seed time
 
@@ -150,7 +149,7 @@ Then open Telegram, find your bot, send `/start`, and send `0501112233`.
 
 **Verified, offline, on this machine:**
 
-- `npm run verify` — 120 tests, 0 failures (37 agent-core, 49 channel, 34 web)
+- `npm run verify` — 86 tests, 0 failures (37 agent-core, 49 channel)
 - `npm run demo --workspace channel` — the full sequence: link → search → book →
   progress → role refusal → quota refusal beyond 24h → extra booking inside 24h
   → reschedule → failed reschedule with the seat kept → cancel → reminder sent

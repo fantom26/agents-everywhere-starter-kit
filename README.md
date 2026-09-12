@@ -1,134 +1,143 @@
 <div align="center">
 
-# Agents, Everywhere Hackathon Starter Kit
+# Practice Agent
 
 ![Agents, Everywhere hackathon — OpenAI, CopilotKit, OpenRouter, Exa, Auth0, and Ambiguous AI](assets/banner.png)
 
-**Build an agent that belongs where people already work, talk, and live.**
+**An AI practice coordinator that lives inside Telegram.**
 
-[Overview](#overview) · [Get started](#get-started) · [Templates](#templates) · [Coding agent](#coding-agent) · [Resources](#resources)
+[What it does](#what-it-does) · [Why Telegram](#why-telegram) · [Quickstart](#quickstart) · [How it works](#how-it-works) · [Submission](SUBMISSION.md)
 
 </div>
 
-> ## 📅 This repository is a hackathon project: **Practice Agent**
->
-> An AI practice coordinator that lives inside Telegram. It knows a student's
-> progress and the available sessions, applies the booking rules, and books the
-> seat for them.
->
-> **→ [Run it](apps/channel/README.md)** · **→ [What we built vs. inherited](SUBMISSION.md)**
->
-> It is built on `apps/channel`, retargeted from managed Slack to the Channels
-> SDK's Telegram adapter. The rest of this file is the starter kit's own
-> documentation, kept for reference; `apps/web` and `apps/mobile` are untouched
-> kit templates that this project does not use.
+## What it does
 
-## Overview
+Students at a coaching school have to complete a set number of educational
+practices each year — six intermodule meetings, four trios, three group
+mentorings. Working out which ones they still need, which sessions have a free
+seat, whether a mentoring role is taken, and whether they are even allowed to
+book an extra session is more than a calendar can express. So it becomes
+messages to a coordinator.
 
-Build for **[Agents, Everywhere: Bots, Channels, & More](https://aitinkerers.org/hackathons/global/agents-everywhere)**, the AI Tinkerers global hackathon on **September 12–13, 2026**. Choose your city on the event page for its local schedule. Put an agent inside a conversation, an app, a phone, or a physical environment. Make the context of that place essential to what it can do.
+Practice Agent is that coordinator, in the Telegram chat students already use.
 
-This kit gives you three runnable templates, files to hand to your coding agent, and sponsor setup notes. Pick a user, a problem, and one complete interaction. You can use any stack; you do not need every sponsor or every surface.
+```
+Студент:  Потрібна практика наступного тижня після 18:00
+Agent:    → search_available_practices({ afterTime: "18:00", … })
+          ┌ Вільні сесії ──────────────────────────────
+          │ 1. Міжмодульні зустрічі
+          │    неділя, 13 вересня, 18:30 (Київ) · за 1 дн 6 год
+          │    Тренер: Сергій Литвин · Вільно: 10 з 10
+          └ [ 1. неділя ] [ 2. вівторок ] [ 3. четвер ]
 
-Your project and its core functionality must be created during the event. Existing libraries, templates, and starter code are allowed; describe what you reuse and what you build. Read [the rules](hackathon-rules.md), then follow your city's participant portal for the current deadline and judging criteria.
+Студент:  Забронюй мене на першу
+Agent:    → book_practice({ sessionId: 2 })
+          ┌ ✅ Заброньовано ───────────────────────────
+          │ Коли   неділя, 13 вересня, 18:30 (Київ)
+          │ Zoom   https://zoom.us/j/98700002
+          └ Бронювання #8 · нагадаю за годину до початку
+```
 
-## Get started
+It also answers "how many intermodule meetings do I still need?", refuses a
+mentoring role that is already taken, explains *why* a booking was refused, and
+messages the student an hour before their session — in Kyiv time, unprompted.
 
-Use Node.js 22+, then clone and install the kit:
+## Why Telegram
+
+Remove the surface and two things break:
+
+1. **The reminder has nowhere to arrive.** Nobody opens a booking site an hour
+   before a session. The reminder is what stops people missing practices, and it
+   only works because the agent can start a conversation.
+2. **"Book me for Wednesday" stops resolving.** It is only meaningful because
+   the options from the previous turn are still on screen.
+
+Telegram is not a transport here. It is what makes the interaction possible.
+
+## Quickstart
+
+Node.js 22+.
 
 ```bash
-git clone https://github.com/CopilotKit/agents-everywhere-starter-kit.git
+git clone <your-repo-url>
 cd agents-everywhere-starter-kit
 npm ci
 cp .env.example .env
 ```
 
-Choose one template and configure only the credentials it needs. Slack and web use the root install; React Native has its own install under `apps/mobile` because Expo pins its React Native stack separately.
+Fill in `.env`:
 
-Paste this into your coding agent:
+```dotenv
+MODEL_PROVIDER=openai
+OPENAI_API_KEY=your-key          # https://platform.openai.com/api-keys
+MODEL=gpt-5.6-sol
 
-```text
-Read AGENTS.md, hackathon-overview.md, hackathon-rules.md, and
-using-sponsor-tools.md. Help me choose one template app README for my idea,
-then build a new project using its infrastructure. Ask me who it is for and
-what the agent should do in that setting. Read the selected template before
-editing; for Slack also read .agents/skills/build-channels-agent/SKILL.md.
-Use only the integrations the idea needs. Verify a complete interaction and
-prepare SUBMISSION.md, distinguishing inherited code from our event work.
+TELEGRAM_BOT_TOKEN=your-token    # @BotFather → /newbot
+CHANNEL_CODE=your-channel-code   # https://intelligence.copilotkit.ai/
+INTELLIGENCE_API_KEY=your-key
 ```
 
-## Templates
+```bash
+npm run dev:telegram             # seeds the database on first run
+```
 
-These starting points serve different kinds of context. **CopilotKit Channels** brings the Slack agent into the conversation; **CopilotKit React** connects the web agent to the app people are using; **CopilotKit React Native** brings the same agent pattern onto a phone.
+Open Telegram, find your bot, send `/start`, then send `0501112233` — one of the
+seeded roster numbers. Full walkthrough in
+[apps/channel/README.md](apps/channel/README.md#try-the-flow).
 
-### 1. Slack — an agent that joins the thread
+To see the entire flow with **no credentials at all**:
 
-**OpenAI + CopilotKit Channels + Exa**
+```bash
+npm run demo
+```
 
-An agent reads what people already said, researches with Exa, and answers in the same thread with native cards and source links. Start with a support conversation, a research discussion, or a team decision.
+That drives the real tools against a real database and prints every card through
+the real Telegram renderer. It stands in only for the model choosing the tool.
 
-The included Slack app supplies thread history, subscriptions, search, and Channels UI. Configure your model, Exa, and a managed Channel, then run `npm run dev:slack`. No public tunnel is needed. Teams or other chat platforms can use the same Channels pattern, but this starter ships the Slack app.
+## How it works
 
-**[Use the Slack template →](apps/channel/)**
+The model handles intent, context, tool choice, and the reply. It decides
+nothing about whether a booking is allowed:
 
-### 2. Web — an agent inside your app
+- **Booking rules live in [`apps/channel/src/domain.ts`](apps/channel/src/domain.ts)** —
+  capacity, duplicates, annual quota, the 24-hour window for extra bookings,
+  mentoring roles, and a transactional reschedule that keeps the original seat
+  when the new one turns out to be unbookable.
+- **The prompt contains no numbers.** Capacities, quotas and thresholds reach
+  the model only as tool results.
+- **No tool takes a student id** — the caller comes from the Telegram actor id,
+  so nothing the model writes can book a seat for someone else.
+- **SQLite enforces what it can.** Partial unique indexes make a duplicate
+  booking and a second coach impossible, not merely unlikely.
 
-**OpenAI + CopilotKit React + Ambiguous AI**
+| Piece | File |
+| --- | --- |
+| Booking rules | [apps/channel/src/domain.ts](apps/channel/src/domain.ts) |
+| Schema and constraints | [apps/channel/src/db.ts](apps/channel/src/db.ts) |
+| Agent tools | [apps/channel/src/tools.tsx](apps/channel/src/tools.tsx) |
+| Telegram wiring | [apps/channel/src/channel.tsx](apps/channel/src/channel.tsx) |
+| Reminder scheduler | [apps/channel/src/reminders.ts](apps/channel/src/reminders.ts) |
 
-An agent sees the page you are on and turns a request into a real workplace record you can still find after a refresh. Adapt it to customer follow-ups, a project workspace, or a personal planning app.
+## Verify
 
-The included web app supplies page context, frontend tools, agent-rendered UI, and a browser approval step. Connect an Ambiguous AI workspace, then run `npm run dev:web`; approved follow-ups are saved through the server and can be read back after refresh.
+```bash
+npm run verify   # typechecks + 86 offline tests across both workspaces
+npm run demo     # the whole booking flow, rendered as Telegram
+```
 
-**[Use the web template →](apps/web/)**
+Live Telegram delivery and model responses need your own bot token and API key.
+See [SUBMISSION.md](SUBMISSION.md#verification-status) for exactly what has and
+has not been checked against live services.
 
-### 3. React Native — an agent in your pocket
+## Built on
 
-**OpenAI or OpenRouter + CopilotKit React Native**
+The [Agents, Everywhere starter kit](https://github.com/CopilotKit/agents-everywhere-starter-kit)
+(AI Tinkerers global hackathon, September 2026). This project uses its
+`apps/channel` template, retargeted from managed Slack to the CopilotKit
+Channels **Telegram** adapter, and its shared model adapter. The kit's other two
+templates and their integrations were removed; see
+[SUBMISSION.md](SUBMISSION.md#what-we-inherited) for the inherited-versus-built
+breakdown, and [AGENTS.md](AGENTS.md) if you are a coding agent working here.
 
-A mobile agent reads app state, renders native cards, and waits for a tap before changing local sample data. Start with a personal finance assistant, a field checklist, an inventory counter, or any workflow where phone context and approval matter.
-
-The included Expo app supplies seeded finance state, native rendered tool UI, a human-in-the-loop expense approval, and a mobile-specific CopilotKit runtime endpoint served by the web app. Configure your model provider, start `npm run dev:web`, then run the mobile app from `apps/mobile`.
-
-**[Use the React Native template →](apps/mobile/)**
-
-### Make the demo yours
-
-The supplied on-call and finance assistants are **infrastructure examples**: read ambient context, call a tool, render useful UI, and return a verifiable result. Choose a different user, problem, dataset, and interaction; the goal is your own project, not another version of the starter scenario.
-
-Use the [demo prompts](dev-docs/demo-prompts.md) to learn how the pieces connect, then replace the sample domain. In the Slack sample incident flow, approval cards record decisions without executing production actions. In the web follow-up flow, the page approval button saves the reviewed Ambiguous task. In the mobile finance flow, approval changes local in-memory sample data. Enforce the same kind of write boundary around any external action you add.
-
-Want another surface pattern? The web app also includes a voice route, and the shared agent can connect to remote MCP tools when configured. The event surfaces are inspiration, not separate tracks or a requirement to build multiple apps.
-
-## Coding agent
-
-Give your agent these files before it starts coding:
-
-| File | What it provides |
-|---|---|
-| [hackathon-overview.md](hackathon-overview.md) | The challenge, four surfaces, and official judging criteria |
-| [hackathon-rules.md](hackathon-rules.md) | Build eligibility, inherited code, and required deliverables |
-| [using-sponsor-tools.md](using-sponsor-tools.md) | Every sponsor featured in this kit: access, authentication, configuration, and a first working call |
-| [AGENTS.md](AGENTS.md) | Repository conventions and verification commands |
-| [Channels skill](.agents/skills/build-channels-agent/SKILL.md) | Verified Channels APIs for the Slack template |
-
-The app READMEs provide launch commands, files to customize, and a concrete result to check. Start with one template and add a second surface only if it helps your user.
-
-## Resources
-
-| Need | Go here |
-|---|---|
-| Event details, deadline, and judging | [Find your city](https://aitinkerers.org/hackathons/global/agents-everywhere), then open its participant portal and handbook |
-| OpenAI agent development | [Agents SDK quickstart](https://openai.github.io/openai-agents-js/guides/quickstart/) |
-| OpenRouter access and model choice | [Quickstart](https://openrouter.ai/docs/quickstart) · [Keys](https://openrouter.ai/keys) · [Model catalog](https://openrouter.ai/models) · [Model switching](dev-docs/model-switching.md) |
-| CopilotKit app development | [Docs](https://docs.copilotkit.ai/) · [Tools and context](dev-docs/tools-and-context.md) · [Discord channel for technical questions](https://discord.com/channels/1122926057641742418/1548038338848489532) |
-| CopilotKit Channels | [Channels guide](https://copilotkit.ai/channels-guide.md) · [Screenshot walkthrough](dev-docs/channels-sdk-walkthrough/README.md) · [OpenTag example app](https://github.com/CopilotKit/OpenTag) |
-| Exa quickstart | [Search API guide](https://exa.ai/docs/reference/search-api-guide) · [Kit setup](using-sponsor-tools.md#exa) |
-| Auth0 API authorization | [Node API](https://auth0.com/docs/quickstart/backend/nodejs) · [Kit setup](using-sponsor-tools.md#auth0) |
-| Ambiguous AI quickstart | [Developer guide](https://www.ambiguous.ai/llms.txt) · [Kit setup](using-sponsor-tools.md#ambiguous-ai) |
-| Rehearse and debug | [Demo prompts](dev-docs/demo-prompts.md) · [Troubleshooting](dev-docs/troubleshooting.md) |
-| Prepare your entry | [Submission checklist](SUBMISSION.md) |
-
-For credit redemption instructions, choose your city on the [global event page](https://aitinkerers.org/hackathons/global/agents-everywhere) and check its participant portal's **Credits & Offers** section.
-
-For technical questions during the event, check your city's participant portal and ask your local organizers.
-
-For the Slack/web workspaces, `npm run verify` runs typechecks and offline tests without credentials. The mobile app has its own install, tests, typecheck, and Metro export checks under `apps/mobile`. Each app reports missing configuration when the relevant integration is used. Live sponsor calls and platform delivery require your accounts. See [developer docs](dev-docs/README.md) for detailed setup and deployment.
+**Sponsors used:** OpenAI (understanding, tool choice, natural-language replies)
+and CopilotKit (Channels runs the agent inside Telegram).
