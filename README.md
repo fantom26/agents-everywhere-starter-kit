@@ -99,7 +99,7 @@ the real Telegram renderer. It stands in only for the model choosing the tool.
 The model handles intent, context, tool choice, and the reply. It decides
 nothing about whether a booking is allowed:
 
-- **Booking rules live in [`apps/channel/src/domain.ts`](apps/channel/src/domain.ts)** —
+- **Booking rules live in [`apps/channel/src/services/domain.ts`](apps/channel/src/services/domain.ts)** —
   capacity, duplicates, annual quota, the 24-hour window for extra bookings,
   mentoring roles, and a transactional reschedule that keeps the original seat
   when the new one turns out to be unbookable.
@@ -112,11 +112,11 @@ nothing about whether a booking is allowed:
 
 | Piece | File |
 | --- | --- |
-| Booking rules | [apps/channel/src/domain.ts](apps/channel/src/domain.ts) |
-| Schema and constraints | [apps/channel/src/db.ts](apps/channel/src/db.ts) |
-| Agent tools | [apps/channel/src/tools.tsx](apps/channel/src/tools.tsx) |
-| Telegram wiring | [apps/channel/src/channel.tsx](apps/channel/src/channel.tsx) |
-| Reminder scheduler | [apps/channel/src/reminders.ts](apps/channel/src/reminders.ts) |
+| Booking rules | [apps/channel/src/services/domain.ts](apps/channel/src/services/domain.ts) |
+| Schema and constraints | [apps/channel/src/db/schema.ts](apps/channel/src/db/schema.ts) |
+| Agent tools | [apps/channel/src/agent/tools/](apps/channel/src/agent/tools/) |
+| Telegram wiring | [apps/channel/src/bot/channel.tsx](apps/channel/src/bot/channel.tsx) |
+| Reminder scheduler | [apps/channel/src/services/reminders.ts](apps/channel/src/services/reminders.ts) |
 
 ## Verify
 

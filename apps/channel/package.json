@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Practice Agent: the practice coordinator, living in Telegram, via CopilotKit Channels.",
   "scripts": {
-    "dev": "node --env-file=../../.env --experimental-sqlite --import tsx --watch src/server.ts",
-    "start": "node --env-file=../../.env --experimental-sqlite --import tsx src/server.ts",
-    "seed": "node --env-file=../../.env --experimental-sqlite --import tsx src/seed.ts",
+    "dev": "node --env-file=../../.env --experimental-sqlite --import tsx --watch src/index.ts",
+    "start": "node --env-file=../../.env --experimental-sqlite --import tsx src/index.ts",
+    "seed": "node --env-file=../../.env --experimental-sqlite --import tsx src/db/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-sqlite --import tsx --test 'src/**/*.test.ts' 'src/**/*.test.tsx'",
+    "test": "node --experimental-sqlite --import tsx --test 'tests/**/*.test.ts' 'tests/**/*.test.tsx'",
     "demo": "node --experimental-sqlite --import tsx src/demo.tsx"
   },
   "dependencies": {

@@ -22,9 +22,9 @@ process.env.PRACTICE_DB_PATH = join(mkdtempSync(join(tmpdir(), "practice-")), "d
 const { renderToIR } = await import("@copilotkit/channels");
 const { renderTelegram } = await import("@copilotkit/channels/telegram");
 const { db } = await import("./db");
-const { seedDatabase } = await import("./seed");
-const { linkPrompt } = await import("./components");
-const { sendDueReminders } = await import("./reminders");
+const { seedDatabase } = await import("./db/seed");
+const { linkPrompt } = await import("./bot/messages/components");
+const { sendDueReminders } = await import("./services/reminders");
 const {
   linkStudentAccount,
   getMyProgress,
@@ -34,10 +34,10 @@ const {
   bookPracticeTool,
   cancelBookingTool,
   rescheduleBookingTool,
-} = await import("./tools");
-const { availability, getBookings, searchSessions } = await import("./domain");
-const { route } = await import("./router");
-const { cb } = await import("./callbacks");
+} = await import("./agent/tools");
+const { availability, getBookings, searchSessions } = await import("./services/domain");
+const { route } = await import("./bot/handlers/router");
+const { cb } = await import("./bot/callbacks");
 const { linkByContact } = await import("./services");
 const { HOUR_MS } = await import("./time");
 

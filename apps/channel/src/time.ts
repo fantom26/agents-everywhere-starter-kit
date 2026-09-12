@@ -8,7 +8,7 @@
  * a year, so the offset is probed from the IANA database at the instant in
  * question.
  */
-import { t } from "./strings";
+import { t } from "./bot/messages/strings";
 
 export const KYIV = "Europe/Kyiv";
 

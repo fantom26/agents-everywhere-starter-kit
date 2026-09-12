@@ -21,10 +21,10 @@ From it, unchanged or nearly so:
 | Inherited | What it does | Our change |
 |---|---|---|
 | `packages/agent-core/` | Shared model adapter and `makeAgent` factory | trimmed to `makeAgent` + `resolveModel`; the incident prompt, Exa and Ambiguous capabilities, and the mobile prompt were removed once `apps/web` went |
-| `apps/channel/src/agent.ts` — the `ChannelRunAgent` class | Gives each turn a fresh inner agent so Channels' re-entry guard is not tripped | none; we changed only the 6-line `makeChannelAgent` factory below it, to pass our prompt and switch the workplace MCP tools off |
-| `apps/channel/src/agent-factory.test.tsx` | Tests that inherited class | none |
-| `apps/channel/src/env.ts` | Required-variable helper | error text only |
-| `apps/channel/src/server.ts` | Runtime lifecycle: teardown-before-listener ordering, `ready()`, the status gate | kept the structure; added seeding and the scheduler, and softened the status gate for the direct-adapter path |
+| `apps/channel/src/agent/agent.ts` — the `ChannelRunAgent` class | Gives each turn a fresh inner agent so Channels' re-entry guard is not tripped | none; we changed only the 6-line `makeChannelAgent` factory below it, to pass our prompt and switch the workplace MCP tools off |
+| `apps/channel/tests/agent-factory.test.tsx` | Tests that inherited class | none |
+| `apps/channel/src/config.ts` | Required-variable helper | error text only |
+| `apps/channel/src/index.ts` | Runtime lifecycle: teardown-before-listener ordering, `ready()`, the status gate | kept the structure; added seeding and the scheduler, and softened the status gate for the direct-adapter path |
 | Root tooling | Workspaces, TypeScript config, the `@ag-ui/client` override | none |
 | `@copilotkit/channels`, `@copilotkit/channels/telegram`, `@copilotkit/runtime` | The Channels engine, its Telegram adapter (grammY), and the runtime | used as published |
 | `apps/web/`, `apps/mobile/` | The kit's other two templates | **removed** as unused, with their demo media and walkthrough docs — see the `chore: remove unused starter-kit templates` commit. Never part of this project. |
@@ -39,25 +39,25 @@ Everything that makes this a practice coordinator. New files, ~2,300 lines:
 
 | Built | What it is |
 |---|---|
-| `apps/channel/src/domain.ts` | **The core.** Every booking rule: capacity, duplicates, quota, the 24-hour rule, mentoring roles, progress, and transactional reschedule |
-| `apps/channel/src/services.ts` | The application layer both doors call — identity in, domain out, no rules of its own |
-| `apps/channel/src/db.ts` | SQLite schema and the constraints the database enforces itself |
-| `apps/channel/src/callbacks.ts` | The button payload grammar: stateless, parsed rather than registered |
-| `apps/channel/src/screens.tsx` | Every screen of the button product |
-| `apps/channel/src/router.tsx` | A tap in, a screen out |
-| `apps/channel/src/telegram-bot.ts` | Contact sharing and callback routing, on the adapter's own grammY bot |
-| `apps/channel/src/tools.tsx` | The nine agent tools, thin over the services |
-| `apps/channel/src/components.tsx` | The cards students see |
-| `apps/channel/src/strings.ts` | Every user-facing string, in one collection |
-| `apps/channel/src/identity.ts` | Roster linking and phone normalisation |
-| `apps/channel/src/calendar.ts`, `google-oauth.ts` | Google Calendar sync and its consent round trip |
+| `apps/channel/src/services/domain.ts` | **The core.** Every booking rule: capacity, duplicates, quota, the 24-hour rule, mentoring roles, progress, and transactional reschedule |
+| `apps/channel/src/services/index.ts` | The application layer both doors call — identity in, domain out, no rules of its own |
+| `apps/channel/src/db/` | SQLite schema, the constraints the database enforces itself, connections and transactions |
+| `apps/channel/src/bot/callbacks.ts` | The button payload grammar: stateless, parsed rather than registered |
+| `apps/channel/src/bot/messages/screens.tsx` | Every screen of the button product |
+| `apps/channel/src/bot/handlers/router.tsx` | A tap in, a screen out |
+| `apps/channel/src/bot/handlers/telegram.ts` | Contact sharing and callback routing, on the adapter's own grammY bot |
+| `apps/channel/src/agent/tools/` | The nine agent tools, thin over the services |
+| `apps/channel/src/bot/messages/components.tsx` | The cards students see |
+| `apps/channel/src/bot/messages/strings.ts` | Every user-facing string, in one collection |
+| `apps/channel/src/services/identity.ts` | Roster linking and phone normalisation |
+| `apps/channel/src/services/calendar.ts`, `google-oauth.ts` | Google Calendar sync and its consent round trip |
 | `apps/channel/src/time.ts` | Kyiv-time conversion, DST-correct |
-| `apps/channel/src/reminders.ts` | The one-hour reminder scheduler |
-| `apps/channel/src/prompt.ts` | The agent's brief |
-| `apps/channel/src/seed.ts` | Roster, practice types, demo sessions |
-| `apps/channel/src/*.test.ts(x)` | 106 tests: the rules, both doors and their parity, the grammar, linking, the calendar, rendering |
+| `apps/channel/src/services/reminders.ts` | The one-hour reminder scheduler |
+| `apps/channel/src/agent/prompt.ts` | The agent's brief |
+| `apps/channel/src/db/seed.ts` | Roster, practice types, demo sessions |
+| `apps/channel/tests/*.test.ts(x)` | 108 tests: the rules, both doors and their parity, the grammar, linking, the calendar, rendering |
 | `apps/channel/src/demo.tsx` | Scripted walkthrough — the button product, then the same system through the agent |
-| `apps/channel/src/channel.tsx` | **Rewritten.** Managed Slack → direct Telegram adapter |
+| `apps/channel/src/bot/channel.tsx` | **Rewritten.** Managed Slack → direct Telegram adapter |
 
 ## Title and description
 

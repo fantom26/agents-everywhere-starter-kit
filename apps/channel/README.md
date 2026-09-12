@@ -122,23 +122,26 @@ a real database, printed through the real Telegram renderer.
 
 | Piece | File |
 | --- | --- |
-| Booking rules — capacity, duplicates, quota, 24-hour rule, roles | [src/domain.ts](src/domain.ts) |
-| Application services — the layer both doors call | [src/services.ts](src/services.ts) |
-| Schema and the constraints SQLite enforces itself | [src/db.ts](src/db.ts) |
-| Button payload grammar | [src/callbacks.ts](src/callbacks.ts) |
-| Button screens | [src/screens.tsx](src/screens.tsx) |
-| Button router: a tap in, a screen out | [src/router.tsx](src/router.tsx) |
-| Contact sharing and callback routing, on the raw bot | [src/telegram-bot.ts](src/telegram-bot.ts) |
-| The agent's tools | [src/tools.tsx](src/tools.tsx) |
-| Cards, built from data that was just read | [src/components.tsx](src/components.tsx) |
-| Every user-facing string | [src/strings.ts](src/strings.ts) |
-| Telegram wiring and message handlers | [src/channel.tsx](src/channel.tsx) |
-| Google Calendar sync and the consent round trip | [src/calendar.ts](src/calendar.ts), [src/google-oauth.ts](src/google-oauth.ts) |
-| One-hour reminder scheduler | [src/reminders.ts](src/reminders.ts) |
-| Identity and phone normalisation | [src/identity.ts](src/identity.ts) |
+| Booking rules — capacity, duplicates, quota, 24-hour rule, roles | [src/services/domain.ts](src/services/domain.ts) |
+| Application services — the layer both doors call | [src/services/index.ts](src/services/index.ts) |
+| Schema and the constraints SQLite enforces itself | [src/db/schema.ts](src/db/schema.ts) |
+| Connections and transactions | [src/db/client.ts](src/db/client.ts) |
+| Button payload grammar | [src/bot/callbacks.ts](src/bot/callbacks.ts) |
+| Button screens | [src/bot/messages/screens.tsx](src/bot/messages/screens.tsx) |
+| Button router: a tap in, a screen out | [src/bot/handlers/router.tsx](src/bot/handlers/router.tsx) |
+| Contact sharing and callback routing, on the raw bot | [src/bot/handlers/telegram.ts](src/bot/handlers/telegram.ts) |
+| The agent's tools | [src/agent/tools/](src/agent/tools/) |
+| The agent and its brief | [src/agent/agent.ts](src/agent/agent.ts), [src/agent/prompt.ts](src/agent/prompt.ts) |
+| Cards, built from data that was just read | [src/bot/messages/components.tsx](src/bot/messages/components.tsx) |
+| Every user-facing string | [src/bot/messages/strings.ts](src/bot/messages/strings.ts) |
+| Telegram wiring and message handlers | [src/bot/channel.tsx](src/bot/channel.tsx) |
+| Google Calendar sync and the consent round trip | [src/services/calendar.ts](src/services/calendar.ts), [src/services/google-oauth.ts](src/services/google-oauth.ts) |
+| One-hour reminder scheduler | [src/services/reminders.ts](src/services/reminders.ts) |
+| Identity and phone normalisation | [src/services/identity.ts](src/services/identity.ts) |
 | Kyiv time | [src/time.ts](src/time.ts) |
-| Roster, practice types, demo sessions | [src/seed.ts](src/seed.ts) |
-| Runtime lifecycle, seeding, OAuth routes, scheduler | [src/server.ts](src/server.ts) |
+| Roster, practice types, demo sessions | [src/db/seed.ts](src/db/seed.ts) |
+| Runtime lifecycle, seeding, OAuth routes, scheduler | [src/index.ts](src/index.ts) |
+| Tests | [tests/](tests/) |
 
 ### Where the line sits
 
