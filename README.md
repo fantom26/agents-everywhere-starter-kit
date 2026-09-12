@@ -10,6 +10,19 @@
 
 </div>
 
+> ## 📅 This repository is a hackathon project: **Practice Agent**
+>
+> An AI practice coordinator that lives inside Telegram. It knows a student's
+> progress and the available sessions, applies the booking rules, and books the
+> seat for them.
+>
+> **→ [Run it](apps/channel/README.md)** · **→ [What we built vs. inherited](SUBMISSION.md)**
+>
+> It is built on `apps/channel`, retargeted from managed Slack to the Channels
+> SDK's Telegram adapter. The rest of this file is the starter kit's own
+> documentation, kept for reference; `apps/web` and `apps/mobile` are untouched
+> kit templates that this project does not use.
+
 ## Overview
 
 Build for **[Agents, Everywhere: Bots, Channels, & More](https://aitinkerers.org/hackathons/global/agents-everywhere)**, the AI Tinkerers global hackathon on **September 12–13, 2026**. Choose your city on the event page for its local schedule. Put an agent inside a conversation, an app, a phone, or a physical environment. Make the context of that place essential to what it can do.
