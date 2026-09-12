@@ -48,6 +48,7 @@ export const telegramAdapter = telegram({
 const bot = telegramAdapter.bot as unknown as BotLike;
 
 // Attached before the runtime starts the adapter, so these see an update first:
+// `/start` is answered here rather than swallowed by the adapter's middleware,
 // a tap on one of our buttons is handled here and not passed on, and a shared
 // contact — which the Channels adapter does not look at — is handled at all.
 attachTelegramHandlers(bot, db());
@@ -152,20 +153,29 @@ channel.onMessage(async ({ thread, message }) => {
   await handleMessage(thread, message.text ?? "", message.actor?.id ?? "");
 });
 
-// Telegram's `/start` in a private chat arrives here — and only here: the
-// adapter suppresses `onCommand("start")`, and `onWelcome` never fires on
-// Telegram at all. This is the screen that used to ask for a phone number every
-// single time; it now asks only when the account is not linked yet.
-channel.onThreadStarted(async ({ thread, actor }) => {
-  const telegramUserId = actor?.id ?? "";
-  if (services.isLinked(db(), telegramUserId)) {
-    await thread.post(linkOrMenu(db(), telegramUserId));
-    return;
-  }
-  // In a private chat the chat id is the user id, which is what the reply
-  // keyboard has to be addressed to.
+// `/start` is NOT wired here. `channel.onThreadStarted` is the documented place
+// for it, but on Telegram it never fires: the adapter's `message:text`
+// middleware is registered before its own `bot.command("start")` and returns on
+// `/start` without calling `next()`, so nothing emits the event and the student
+// who pressed START saw silence. `handlers/telegram.ts` answers `/start` on the
+// grammY bot instead, ahead of the adapter — which is also the only layer that
+// can send the contact keyboard.
+
+/**
+ * Nothing but checking in is available to an unlinked student.
+ *
+ * Every command runs this first. Unlinked, the answer is always the same one:
+ * the link prompt with Telegram's contact button under it, rather than a screen
+ * of somebody else's schedule. Returns `true` when the command should stop.
+ *
+ * In a private chat the chat id is the user id, which is what the reply keyboard
+ * has to be addressed to.
+ */
+async function gateUnlinked(telegramUserId: string): Promise<boolean> {
+  if (services.isLinked(db(), telegramUserId)) return false;
   await askForContact(bot, telegramUserId);
-});
+  return true;
+}
 
 /**
  * Slash commands, so every screen is reachable without scrolling back up the
@@ -174,15 +184,19 @@ channel.onThreadStarted(async ({ thread, actor }) => {
  * Declared rather than attached with `channel.onCommand(name, fn)`, because a
  * declared command carries a description and the adapter registers the set with
  * BotFather — which is what puts them in Telegram's own menu button. `/start` is
- * absent on purpose: the adapter suppresses it and routes it to
- * `onThreadStarted` instead.
+ * absent on purpose: Telegram offers it by itself on a fresh chat, and
+ * `handlers/telegram.ts` owns it.
+ *
+ * Every one of them is closed until the student has checked in.
  */
 const commands = [
   defineChannelCommand({
     name: "menu",
     description: "Everything, in one screen",
     async handler({ thread, actor }) {
-      await thread.post(linkOrMenu(db(), actor?.id ?? ""));
+      const telegramUserId = actor?.id ?? "";
+      if (await gateUnlinked(telegramUserId)) return;
+      await thread.post(linkOrMenu(db(), telegramUserId));
     },
   }),
 
@@ -191,11 +205,8 @@ const commands = [
     description: "Find a practice to book",
     async handler({ thread, actor }) {
       const telegramUserId = actor?.id ?? "";
-      await thread.post(
-        services.isLinked(db(), telegramUserId)
-          ? typePicker(services.practiceTypes(db()))
-          : linkOrMenu(db(), telegramUserId),
-      );
+      if (await gateUnlinked(telegramUserId)) return;
+      await thread.post(typePicker(services.practiceTypes(db())));
     },
   }),
 
@@ -203,12 +214,10 @@ const commands = [
     name: "progress",
     description: "How many practices you have booked this year",
     async handler({ thread, actor }) {
-      const result = services.progressFor(db(), actor?.id ?? "");
-      await thread.post(
-        result.linked
-          ? progressCard(result.student.fullName, result.progress)
-          : linkOrMenu(db(), actor?.id ?? ""),
-      );
+      const telegramUserId = actor?.id ?? "";
+      if (await gateUnlinked(telegramUserId)) return;
+      const result = services.progressFor(db(), telegramUserId);
+      if (result.linked) await thread.post(progressCard(result.student.fullName, result.progress));
     },
   }),
 
@@ -216,19 +225,18 @@ const commands = [
     name: "bookings",
     description: "Your upcoming practices",
     async handler({ thread, actor }) {
-      const result = services.bookingsFor(db(), actor?.id ?? "");
-      await thread.post(
-        result.linked
-          ? bookingsCard(result.bookings, new Date())
-          : linkOrMenu(db(), actor?.id ?? ""),
-      );
+      const telegramUserId = actor?.id ?? "";
+      if (await gateUnlinked(telegramUserId)) return;
+      const result = services.bookingsFor(db(), telegramUserId);
+      if (result.linked) await thread.post(bookingsCard(result.bookings, new Date()));
     },
   }),
 
   defineChannelCommand({
     name: "help",
     description: "The practices, the quota, and the booking rules",
-    async handler({ thread }) {
+    async handler({ thread, actor }) {
+      if (await gateUnlinked(actor?.id ?? "")) return;
       await thread.post(infoScreen(services.practiceTypes(db())));
     },
   }),

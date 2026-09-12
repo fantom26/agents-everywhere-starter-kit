@@ -14,6 +14,11 @@
  *    string equality, which cannot express `b:17`. Reading `callback_query`
  *    directly lets every payload be parsed instead of pre-registered, and that
  *    is what makes the button UI stateless — see `callbacks.ts`.
+ * 3. **`/start`.** `channel.onThreadStarted` never fires on Telegram: the
+ *    adapter's own `message:text` middleware is registered before its
+ *    `bot.command("start")` and returns on `/start` without calling `next()`,
+ *    so the handler that would emit the event is unreachable. A student who
+ *    pressed START therefore got silence. `/start` is answered here instead.
  *
  * Ordering matters: these handlers are attached before the adapter starts, so
  * they run first. A payload we recognise is *not* passed on (`next()` is not
@@ -46,13 +51,14 @@ export type BotLike = {
     ): Promise<unknown>;
   };
   on(filter: string, handler: (ctx: BotContext, next: NextFn) => Promise<void>): unknown;
+  command(name: string, handler: (ctx: BotContext, next: NextFn) => Promise<void>): unknown;
 };
 
 export type NextFn = () => Promise<void>;
 
 /** The slice of a grammY update context this file reads. */
 export type BotContext = {
-  chat?: { id: ChatId };
+  chat?: { id: ChatId; type?: string };
   from?: { id: ChatId };
   message?: {
     message_id?: number;
@@ -112,17 +118,41 @@ export async function askForContact(bot: BotLike, chatId: ChatId): Promise<void>
     reply_markup: {
       keyboard: [[{ text: t.link.shareButton, request_contact: true }]],
       resize_keyboard: true,
-      one_time_keyboard: true,
+      // Deliberately *not* `one_time_keyboard`: until the student has checked
+      // in, sharing the number is the only thing they can do, so the button
+      // stays in front of them. Checking in removes it (`remove_keyboard`).
     },
   });
 }
 
 /**
- * Attach both handlers to the adapter's bot.
+ * Attach the handlers to the adapter's bot.
  *
- * Call this once, at import time, before the runtime starts the adapter.
+ * Call this once, at import time, before the runtime starts the adapter — that
+ * is what puts these ahead of the adapter's own middleware.
  */
 export function attachTelegramHandlers(bot: BotLike, db: Db): void {
+  // The first screen. An unlinked student gets the contact keyboard and nothing
+  // else; a linked one gets the menu straight away. `next()` is deliberately not
+  // called: the adapter's `/start` path is dead anyway (see the file header).
+  bot.command("start", async (ctx, next) => {
+    const from = ctx.from?.id;
+    const chatId = ctx.chat?.id;
+    // One student per chat is the whole identity model, so a phone number is
+    // never asked for in a group. Only bail when we positively know it is one.
+    const group = ctx.chat?.type !== undefined && ctx.chat.type !== "private";
+    if (from === undefined || chatId === undefined || group) {
+      await next();
+      return;
+    }
+
+    if (services.isLinked(db, String(from))) {
+      await sendCard(bot, chatId, linkOrMenu(db, String(from)));
+      return;
+    }
+    await askForContact(bot, chatId);
+  });
+
   bot.on("message:contact", async (ctx, next) => {
     const contact = ctx.message?.contact;
     const from = ctx.from?.id;
@@ -171,6 +201,14 @@ export function attachTelegramHandlers(bot: BotLike, db: Db): void {
     // Telegram spins the button until the query is answered, and gives about
     // three seconds. Ack before doing any work.
     await ctx.answerCallbackQuery?.().catch(() => {});
+
+    // Until the student has checked in, every button leads back to the one
+    // thing they can do. `route` refuses an unlinked caller too — it just has
+    // no way to send the reply keyboard, which is the part that unblocks them.
+    if (!services.isLinked(db, String(from))) {
+      await askForContact(bot, chatId);
+      return;
+    }
 
     const rendered = route(db, String(from), data);
     const { text, other } = toTelegram(rendered.card);

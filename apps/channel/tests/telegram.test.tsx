@@ -17,6 +17,12 @@ import { availability, bookPractice, getBookings, cancelBooking } from "../src/s
 import { linkStudent } from "../src/services/identity";
 import { sendDueReminders, type ReminderBot } from "../src/services/reminders";
 import {
+  attachTelegramHandlers,
+  type BotContext,
+  type BotLike,
+  type NextFn,
+} from "../src/bot/handlers/telegram";
+import {
   bookingConfirmation,
   bookingsCard,
   progressCard,
@@ -228,5 +234,125 @@ describe("reminder scheduler", () => {
     const working = fakeBot();
     await sendDueReminders({ db, bot: working.bot }, anHourBefore);
     assert.equal(working.sent.length, 1);
+  });
+});
+
+/**
+ * The grammY bot, faked.
+ *
+ * `attachTelegramHandlers` registers by filter string, so the fake keeps the
+ * handlers in a map and the tests fire one by name — which is as close to a real
+ * update as this gets without a token.
+ */
+function fakeChannelBot() {
+  const sent: { chatId: string; text: string; other?: Record<string, unknown> }[] = [];
+  const handlers = new Map<string, (ctx: BotContext, next: NextFn) => Promise<void>>();
+  const bot: BotLike = {
+    api: {
+      async sendMessage(chatId, text, other) {
+        sent.push({ chatId: String(chatId), text, other });
+        return { message_id: sent.length };
+      },
+      async editMessageText() {
+        return {};
+      },
+    },
+    on(filter, handler) {
+      handlers.set(filter, handler);
+    },
+    command(name, handler) {
+      handlers.set(`command:${name}`, handler);
+    },
+  };
+
+  /** Fire one update at the handler registered for `filter`. */
+  const fire = async (filter: string, ctx: Partial<BotContext>) => {
+    const handler = handlers.get(filter);
+    assert.ok(handler, `no handler registered for ${filter}`);
+    await handler({ api: bot.api, ...ctx } as BotContext, async () => {});
+  };
+
+  return { bot, sent, fire };
+}
+
+/** The reply keyboard on a sent message, if it carries one. */
+function replyKeyboard(other?: Record<string, unknown>) {
+  const markup = other?.reply_markup as
+    | { keyboard?: { text: string; request_contact?: boolean }[][] }
+    | undefined;
+  return (markup?.keyboard ?? []).flat();
+}
+
+describe("checking in", () => {
+  const TG = 424242;
+
+  it("answers /start with the contact button — the adapter's own handler never runs", async () => {
+    const { bot, sent, fire } = fakeChannelBot();
+    attachTelegramHandlers(bot, db);
+
+    await fire("command:start", { chat: { id: TG }, from: { id: TG } });
+
+    assert.equal(sent.length, 1);
+    const [share] = replyKeyboard(sent[0].other);
+    assert.ok(share, `/start must offer the contact button:\n${JSON.stringify(sent[0])}`);
+    assert.equal(share.request_contact, true);
+    assert.match(sent[0].text, /phone number/);
+  });
+
+  it("opens the menu on /start once the student is linked, with no keyboard left over", async () => {
+    linkStudent(db, String(TG), "+380501112233");
+    const { bot, sent, fire } = fakeChannelBot();
+    attachTelegramHandlers(bot, db);
+
+    await fire("command:start", { chat: { id: TG }, from: { id: TG } });
+
+    assert.equal(sent.length, 1);
+    assert.equal(replyKeyboard(sent[0].other).length, 0);
+    assert.ok(!/phone/i.test(sent[0].text), `a linked student is not asked again:\n${sent[0].text}`);
+  });
+
+  it("sends the contact button back, not a screen, when an unlinked account taps a button", async () => {
+    const { bot, sent, fire } = fakeChannelBot();
+    attachTelegramHandlers(bot, db);
+
+    await fire("callback_query:data", {
+      chat: { id: TG },
+      from: { id: TG },
+      callbackQuery: { id: "1", data: "m", message: { message_id: 7 } },
+      answerCallbackQuery: async () => ({}),
+    });
+
+    assert.equal(sent.length, 1);
+    assert.ok(replyKeyboard(sent[0].other).some((button) => button.request_contact));
+  });
+
+  it("links a shared contact, clears the keyboard, and lands on the menu", async () => {
+    const { bot, sent, fire } = fakeChannelBot();
+    attachTelegramHandlers(bot, db);
+
+    await fire("message:contact", {
+      chat: { id: TG },
+      from: { id: TG },
+      message: { contact: { phone_number: "+380501112233", user_id: TG } },
+    });
+
+    assert.equal(sent.length, 2, "a welcome and the menu");
+    assert.deepEqual(sent[0].other?.reply_markup, { remove_keyboard: true });
+    assert.match(sent[0].text, /Олена Ковальчук/);
+  });
+
+  it("offers the button again when the shared number is not on the roster", async () => {
+    const { bot, sent, fire } = fakeChannelBot();
+    attachTelegramHandlers(bot, db);
+
+    await fire("message:contact", {
+      chat: { id: TG },
+      from: { id: TG },
+      message: { contact: { phone_number: "+380500000000", user_id: TG } },
+    });
+
+    assert.equal(sent.length, 2, "the refusal, then the button again");
+    assert.match(sent[0].text, /not on the student roster/);
+    assert.ok(replyKeyboard(sent[1].other).some((button) => button.request_contact));
   });
 });
