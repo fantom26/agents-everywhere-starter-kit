@@ -3,11 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The one agent every surface points at. Model, prompt, and surface-agnostic capabilities.",
+  "description": "The shared agent factory and model provider resolution.",
   "exports": {
-    ".": "./src/index.ts",
-    "./shared": "./src/shared.ts",
-    "./mobile-finance-prompt": "./src/mobile-finance-prompt.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -15,8 +13,6 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.36",
-    "@copilotkit/runtime": "1.70.3",
-    "exa-js": "^2.19.0",
-    "zod": "^4.1.0"
+    "@copilotkit/runtime": "1.70.3"
   }
 }

@@ -14,14 +14,14 @@ type ChannelAgentFactory = (threadId: string) => AbstractAgent;
  * observable completes. BuiltInAgent clears its private abort controller later,
  * in its async cleanup, so reusing one instance can trip its reentry guard. This
  * facade leaves AbstractAgent.runAgent untouched and swaps only run(input), which
- * gives every invocation a clean inner agent without changing the shared web and
- * mobile makeAgent factory.
+ * gives every invocation a clean inner agent without changing the shared
+ * makeAgent factory.
  */
 export class ChannelRunAgent extends AbstractAgent {
   private activeInner: AbstractAgent | undefined;
 
   constructor(
-    private agentFactory: ChannelAgentFactory = makeAgent,
+    private agentFactory: ChannelAgentFactory,
     threadId?: string,
   ) {
     super({ threadId });
@@ -84,13 +84,13 @@ export class ChannelRunAgent extends AbstractAgent {
 /**
  * The practice coordinator, one fresh agent per conversation.
  *
- * `workplace: false` keeps the shared workplace MCP tools out of this agent —
- * the only tools it should ever see are the practice tools, so there is nothing
- * it could call that would sidestep the booking rules.
+ * The agent is handed nothing but the practice prompt: `makeAgent` registers no
+ * MCP servers, and the only tools it ever sees are the ones `createChannel`
+ * passes. There is nothing it could call that would sidestep the booking rules.
  */
 export function makeChannelAgent(threadId: string) {
   return new ChannelRunAgent(
-    (id) => makeAgent(id, { prompt: PRACTICE_AGENT_PROMPT, workplace: false }),
+    (id) => makeAgent(id, { prompt: PRACTICE_AGENT_PROMPT }),
     threadId,
   );
 }

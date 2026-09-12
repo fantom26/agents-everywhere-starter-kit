@@ -10,8 +10,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/channel",
-    "apps/web"
+    "apps/channel"
   ],
   "scripts": {
     "dev": "npm run dev:telegram",
@@ -21,7 +20,6 @@
     "channel:status": "npx copilotkit@latest channels status --json",
     "channel:setup": "npx copilotkit@latest channels setup",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:web": "npm run dev --workspace web",
     "test": "npm run test --workspaces --if-present",
     "verify": "npm run typecheck && npm test"
   },
