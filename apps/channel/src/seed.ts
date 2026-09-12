@@ -11,26 +11,27 @@
 import { pathToFileURL } from "node:url";
 import type { Db } from "./db";
 import { openDb } from "./db";
+import { normalizePhone } from "./identity";
 import { HOUR_MS, DAY_MS, kyivToUtc, kyivWallClock } from "./time";
 
 export const PRACTICE_TYPES = [
   {
     code: "trios",
-    title: "Робота в трійках",
+    title: "Trio practice",
     capacity: 6,
     requiredPerYear: 4,
     roles: [] as { role: string; seats: number }[],
   },
   {
     code: "intermodule",
-    title: "Міжмодульні зустрічі",
+    title: "Intermodule meeting",
     capacity: 10,
     requiredPerYear: 6,
     roles: [],
   },
   {
     code: "mentoring",
-    title: "Груповий менторинг",
+    title: "Group mentoring",
     capacity: 12,
     requiredPerYear: 3,
     roles: [
@@ -67,6 +68,16 @@ export type SeedResult = {
 };
 
 export function seedDatabase(db: Db, now = new Date()): SeedResult {
+  // Re-seeding refreshes the demo sessions, and it used to unlink every student
+  // with them — which is why the bot kept asking for a phone number it had
+  // already been given. The roster is keyed by phone, so the links survive by
+  // being carried across the rebuild by phone.
+  const links = db
+    .prepare(
+      `SELECT phone, telegram_user_id, linked_at FROM students WHERE telegram_user_id IS NOT NULL`,
+    )
+    .all() as { phone: string; telegram_user_id: string; linked_at: string | null }[];
+
   db.exec(
     `DELETE FROM bookings; DELETE FROM sessions;
      DELETE FROM practice_roles; DELETE FROM practice_types; DELETE FROM students;`,
@@ -162,7 +173,7 @@ export function seedDatabase(db: Db, now = new Date()): SeedResult {
   const classmate = () => {
     classmates += 1;
     return Number(
-      insertStudent.run(`Студент ${classmates}`, `+38050000${String(1000 + classmates)}`)
+      insertStudent.run(`Student ${classmates}`, `+38050000${String(1000 + classmates)}`)
         .lastInsertRowid,
     );
   };
@@ -176,6 +187,21 @@ export function seedDatabase(db: Db, now = new Date()): SeedResult {
 
   // Take the coach seat on one mentoring session, leaving client and listeners.
   insertBooking.run(mentoringSessionId, classmate(), "coach", stamp);
+
+  // Put the Telegram links back, matched by phone. A number that has since left
+  // the roster simply finds no row and is dropped.
+  const relink = db.prepare(
+    `UPDATE students SET telegram_user_id = ?, linked_at = ? WHERE phone = ?`,
+  );
+  const byPhone = new Map(
+    (db.prepare(`SELECT id, phone FROM students`).all() as { id: number; phone: string }[]).map(
+      (row) => [normalizePhone(String(row.phone)), String(row.phone)],
+    ),
+  );
+  for (const link of links) {
+    const phone = byPhone.get(normalizePhone(String(link.phone)));
+    if (phone) relink.run(link.telegram_user_id, link.linked_at, phone);
+  }
 
   return {
     students: studentIds.length + classmates,

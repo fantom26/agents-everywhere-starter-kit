@@ -46,22 +46,35 @@ export function findStudentByTelegramId(db: Db, telegramUserId: string): Student
   );
 }
 
+export type LinkRefusal = "no_such_phone" | "phone_taken" | "telegram_already_linked";
+
 export type LinkOutcome =
   | { ok: true; student: Student; alreadyLinked: boolean }
-  | { ok: false; reason: "no_such_phone" | "phone_taken"; explanation: string };
+  | { ok: false; reason: LinkRefusal; explanation: string };
 
 /**
  * Attach a Telegram account to a roster row.
  *
- * A phone already claimed by a different Telegram account is refused rather
- * than reassigned — otherwise anyone who knows a classmate's number could take
- * over their progress.
+ * Two refusals, both of them one-way doors on purpose. A phone already claimed
+ * by a different Telegram account is refused rather than reassigned — otherwise
+ * anyone who knows a classmate's number could take over their progress. And a
+ * Telegram account already linked to one student cannot be pointed at another:
+ * `telegram_user_id` is UNIQUE, so the alternative is not a second link but a
+ * raw constraint violation.
  */
 export function linkStudent(db: Db, telegramUserId: string, rawPhone: string): LinkOutcome {
   const phone = normalizePhone(rawPhone);
   const existing = findStudentByTelegramId(db, telegramUserId);
-  if (existing && normalizePhone(existing.phone) === phone) {
-    return { ok: true, student: existing, alreadyLinked: true };
+  if (existing) {
+    if (normalizePhone(existing.phone) === phone) {
+      return { ok: true, student: existing, alreadyLinked: true };
+    }
+    return {
+      ok: false,
+      reason: "telegram_already_linked",
+      explanation:
+        "This Telegram account is already linked to a different student on the roster. The coordinator has to unlink it first.",
+    };
   }
 
   const rows = db

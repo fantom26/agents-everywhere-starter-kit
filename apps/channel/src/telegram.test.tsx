@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { renderToIR } from "@copilotkit/channels";
 import { renderTelegram } from "@copilotkit/channels/telegram";
 import { openDb, type Db } from "./db";
+import { decode } from "./callbacks";
 import { seedDatabase } from "./seed";
 import { availability, bookPractice, getBookings, cancelBooking } from "./domain";
 import { linkStudent } from "./identity";
@@ -21,7 +22,7 @@ import {
   progressCard,
   reminderCard,
   sessionOptions,
-  welcomeMessage,
+  linkPrompt,
 } from "./components";
 import { getProgress, searchSessions } from "./domain";
 import { HOUR_MS } from "./time";
@@ -70,8 +71,8 @@ describe("Telegram rendering", () => {
     );
 
     assert.equal(payload.parseMode, "HTML");
-    assert.match(payload.text, /Заброньовано/);
-    assert.match(payload.text, /Міжмодульні зустрічі/);
+    assert.match(payload.text, /Booked/);
+    assert.match(payload.text, /Intermodule meeting/);
     assert.ok(
       payload.text.includes(found.session.zoomUrl),
       "the confirmation must carry the session's own Zoom link",
@@ -86,10 +87,20 @@ describe("Telegram rendering", () => {
     const found = searchSessions(db, { practiceTypeCode: "intermodule", limit: 3 }, NOW);
     assert.equal(found.length, 3);
 
-    const payload = renderTelegram(renderToIR(sessionOptions(found, NOW, async () => {})));
+    const payload = renderTelegram(renderToIR(sessionOptions(found, NOW)));
     const buttons = (payload.inlineKeyboard ?? []).flat();
 
-    assert.equal(buttons.length, 3, "each offered session needs a booking button");
+    // One button per session, plus the Back button every screen carries.
+    const booking = buttons.filter((button) => {
+      const action = decode(button.callbackData);
+      return action?.kind === "book" || action?.kind === "session";
+    });
+    assert.equal(booking.length, 3, "each offered session needs a booking button");
+    assert.ok(
+      buttons.some((button) => decode(button.callbackData)?.kind === "menu"),
+      "a search card needs a way back",
+    );
+
     for (const button of buttons) {
       assert.ok(button.callbackData, "a booking button must carry callback data");
       assert.ok(
@@ -100,27 +111,36 @@ describe("Telegram rendering", () => {
     }
   });
 
-  it("renders an empty search as an explanation rather than an empty keyboard", () => {
-    const payload = renderTelegram(renderToIR(sessionOptions([], NOW, async () => {})));
-    assert.match(payload.text, /Нічого не знайшов/);
-    assert.ok(!payload.inlineKeyboard?.flat().length);
+  it("renders an empty search as an explanation, offering no session to book", () => {
+    const payload = renderTelegram(renderToIR(sessionOptions([], NOW)));
+    assert.match(payload.text, /No free sessions/);
+
+    // A way back is fine — a button that claims to book something is not.
+    const buttons = (payload.inlineKeyboard ?? []).flat();
+    assert.ok(
+      buttons.every((button) => {
+        const action = decode(button.callbackData);
+        return action?.kind !== "book" && action?.kind !== "session";
+      }),
+      "an empty search must not offer a session",
+    );
   });
 
   it("never offers a taken mentoring role in a rendered card", () => {
     const found = availability(db, seed.mentoringSessionId)!;
-    const payload = renderTelegram(renderToIR(sessionOptions([found], NOW, async () => {})));
+    const payload = renderTelegram(renderToIR(sessionOptions([found], NOW)));
     // The coach seat is taken in the fixture, so the card must not advertise it.
-    assert.match(payload.text, /клієнт/);
-    assert.ok(!/коуч/.test(payload.text), `coach must not be offered:\n${payload.text}`);
+    assert.match(payload.text, /Client/);
+    assert.ok(!/Coach/.test(payload.text), `coach must not be offered:\n${payload.text}`);
   });
 
   it("keeps every card inside Telegram's 4096-character message limit", () => {
     const progress = getProgress(db, ME);
     const many = searchSessions(db, { limit: 10 }, NOW);
     for (const [name, node] of [
-      ["welcome", welcomeMessage()],
+      ["welcome", linkPrompt()],
       ["progress", progressCard("Олена Ковальчук", progress)],
-      ["options", sessionOptions(many, NOW, async () => {})],
+      ["options", sessionOptions(many, NOW)],
       ["bookings", bookingsCard(getBookings(db, ME, { now: NOW }), NOW)],
     ] as const) {
       const payload = renderTelegram(renderToIR(node));
@@ -162,8 +182,8 @@ describe("reminder scheduler", () => {
     assert.equal(count, 1);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].chatId, "777001");
-    assert.match(sent[0].text, /Практика за годину/);
-    assert.match(sent[0].text, /Міжмодульні зустрічі/);
+    assert.match(sent[0].text, /Practice in an hour/);
+    assert.match(sent[0].text, /Intermodule meeting/);
   });
 
   it("does not send the same reminder twice", async () => {

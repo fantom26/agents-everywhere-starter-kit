@@ -5,11 +5,20 @@
  * deliberate. An agent-rendered component takes its contents from parameters
  * the model writes, which would let the model put a time, a trainer, or a free
  * seat on screen that SQLite never said existed. Every card here is built by
- * the tool that just read the data, so what a student sees is what the database
- * holds. The model's job is the sentence around the card, not the card.
+ * the tool or screen that just read the data, so what a student sees is what
+ * the database holds. The model's job is the sentence around the card, not the
+ * card.
  *
  * On Telegram this JSX renders as HTML plus an inline keyboard; `<Fields>`
  * become bold labels and `<Actions>` become tappable buttons.
+ *
+ * **Buttons carry a `value` and never an `onClick`.** A closure-bound button is
+ * dispatched from an in-process registry that does not survive a restart — the
+ * click then silently does nothing. A `value` becomes the Telegram
+ * `callback_data` verbatim, which `router.tsx` parses, so a card posted before a
+ * restart still works afterwards. See `callbacks.ts` for the grammar.
+ *
+ * Every visible string comes from `strings.ts`. Do not add a literal here.
  */
 import {
   Message,
@@ -25,6 +34,8 @@ import {
 } from "@copilotkit/channels";
 import type { Availability, BookingView, Progress, Role } from "./domain";
 import { formatKyiv, formatLeadTime } from "./time";
+import { t, practiceTitle, roleName } from "./strings";
+import { cb } from "./callbacks";
 
 const ACCENT = {
   brand: "#2D6CDF",
@@ -33,33 +44,27 @@ const ACCENT = {
   bad: "#C4145F",
 } as const;
 
-export const ROLE_LABEL: Record<Role, string> = {
-  coach: "коуч",
-  client: "клієнт",
-  listener: "слухач",
-};
-
-/** "3 з 6 · залишилось 3" — the line a student wants at a glance. */
+/** "████░░  4 / 6 · 2 to go" — the line a student wants at a glance. */
 function progressLine(entry: Progress): string {
-  const bar = "█".repeat(Math.min(entry.booked, entry.required)).padEnd(
-    entry.required,
-    "░",
-  );
-  const extra = entry.extra > 0 ? ` (+${entry.extra} понад норму)` : "";
-  const tail = entry.complete ? "норму виконано" : `залишилось ${entry.remaining}`;
-  return `${bar}  ${entry.booked} з ${entry.required} · ${tail}${extra}`;
+  const bar = "█".repeat(Math.min(entry.booked, entry.required)).padEnd(entry.required, "░");
+  const extra = entry.extra > 0 ? t.progress.extra(entry.extra) : "";
+  const tail = entry.complete ? t.progress.complete : t.progress.remaining(entry.remaining);
+  return `${bar}  ${t.progress.line(entry.booked, entry.required)} · ${tail}${extra}`;
 }
 
 export function progressCard(studentName: string, progress: Progress[]) {
   return (
     <Message accent={ACCENT.brand}>
-      <Header>Прогрес: {studentName}</Header>
+      <Header>{t.progress.header(studentName)}</Header>
       {progress.map((entry) => (
         <Section>
-          <Markdown>{`**${entry.title}**\n\`${progressLine(entry)}\``}</Markdown>
+          <Markdown>{`**${practiceTitle(entry.code, entry.title)}**\n\`${progressLine(entry)}\``}</Markdown>
         </Section>
       ))}
-      <Context>Бронювання зараховується як виконана практика.</Context>
+      <Context>{t.progress.note}</Context>
+      <Actions>
+        <Button value={cb.menu()}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }
@@ -68,12 +73,12 @@ export function progressCard(studentName: string, progress: Progress[]) {
 function rolesLine(found: Availability): string | undefined {
   if (found.roles.length === 0) return undefined;
   const free = found.roles.filter((role) => role.free > 0);
-  if (free.length === 0) return "усі ролі зайняті";
+  if (free.length === 0) return t.roles.noneFree;
   return free
     .map((role) =>
       role.seats > 1
-        ? `${ROLE_LABEL[role.role]} (${role.free} з ${role.seats})`
-        : ROLE_LABEL[role.role],
+        ? `${roleName(role.role)} (${role.free}/${role.seats})`
+        : roleName(role.role),
     )
     .join(", ");
 }
@@ -81,71 +86,78 @@ function rolesLine(found: Availability): string | undefined {
 function sessionSummary(found: Availability, now: Date): string {
   const roles = rolesLine(found);
   return [
-    `**${found.type.title}**`,
-    `${formatKyiv(found.session.startsAt)} (Київ) · ${formatLeadTime(now, found.session.startsAt)}`,
-    `Тренер: ${found.session.trainer}`,
-    `Вільно: ${found.free} з ${found.capacity}`,
-    roles ? `Ролі: ${roles}` : undefined,
+    `**${practiceTitle(found.type.code, found.type.title)}**`,
+    `${formatKyiv(found.session.startsAt)} (Kyiv) · ${formatLeadTime(now, found.session.startsAt)}`,
+    t.find.trainer(found.session.trainer),
+    t.find.freeSeats(found.free, found.capacity),
+    roles ? t.info.rolesLine(roles) : undefined,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-export type BookHandler = (
-  sessionId: number,
-  ctx: import("@copilotkit/channels").InteractionContext<string>,
-) => Promise<void>;
+/** The short label an option button carries: "1. Tue 15 Sep". */
+function optionLabel(index: number, found: Availability): string {
+  return `${index + 1}. ${formatKyiv(found.session.startsAt).split(",").slice(0, 2).join(",").trim()}`;
+}
 
 /**
  * Search results, each with a one-tap booking button.
  *
- * The button carries only a session id; the click handler re-resolves the
- * student from the Telegram actor and re-runs every rule, so a stale card
- * cannot book a seat that has since filled up.
+ * The button carries only a session id; the router re-resolves the student from
+ * the Telegram actor and re-runs every rule, so a stale card cannot book a seat
+ * that has since filled up.
+ *
+ * `back` is the callback the "Back" button returns to — the screen that asked
+ * for this list. The AI path has no screen behind it, so it passes the menu.
  */
 export function sessionOptions(
   found: Availability[],
   now: Date,
-  onBook?: BookHandler,
+  opts: { back?: string } = {},
 ) {
+  const back = opts.back ?? cb.menu();
+
   if (found.length === 0) {
     return (
       <Message accent={ACCENT.warn}>
-        <Header>Нічого не знайшов</Header>
+        <Header>{t.find.slotsHeader}</Header>
         <Section>
-          <Markdown>
-            За цими умовами вільних сесій немає. Спробуй інший час або ширший діапазон дат.
-          </Markdown>
+          <Markdown>{t.find.empty}</Markdown>
         </Section>
+        <Actions>
+          <Button value={back}>{t.menu.back}</Button>
+        </Actions>
       </Message>
     );
   }
 
   return (
     <Message accent={ACCENT.brand}>
-      <Header>Вільні сесії</Header>
+      <Header>{t.find.slotsHeader}</Header>
       {found.map((session, index) => (
         <Section>
           <Markdown>{`${index + 1}. ${sessionSummary(session, now)}`}</Markdown>
         </Section>
       ))}
       <Divider />
-      <Context>Час указано за Києвом. Натисни кнопку або просто напиши, що обираєш.</Context>
-      {onBook && (
-        <Actions>
-          {found.slice(0, 6).map((session, index) => (
-            <Button
-              value={String(session.session.id)}
-              style={index === 0 ? "primary" : undefined}
-              onClick={async (ctx) => {
-                await onBook(session.session.id, ctx);
-              }}
-            >
-              {`${index + 1}. ${formatKyiv(session.session.startsAt).split(",")[0]}`}
-            </Button>
-          ))}
-        </Actions>
-      )}
+      <Context>{t.find.kyivNote}</Context>
+      <Actions>
+        {found.slice(0, 6).map((session, index) => (
+          <Button
+            value={
+              // A role-based practice needs the role picked first, so its button
+              // opens the session rather than booking it outright.
+              session.type.roleBased
+                ? cb.session(session.session.id)
+                : cb.book(session.session.id)
+            }
+          >
+            {optionLabel(index, session)}
+          </Button>
+        ))}
+        <Button value={back}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }
@@ -157,19 +169,21 @@ export function sessionDetailCard(
 ) {
   return (
     <Message accent={bookable.ok ? ACCENT.good : ACCENT.warn}>
-      <Header>{found.type.title}</Header>
+      <Header>{practiceTitle(found.type.code, found.type.title)}</Header>
       <Fields>
-        <Field label="Коли">{`${formatKyiv(found.session.startsAt)} (Київ)`}</Field>
-        <Field label="Тренер">{found.session.trainer}</Field>
-        <Field label="Місця">{`${found.free} вільних з ${found.capacity}`}</Field>
-        {found.roles.length > 0 && <Field label="Ролі">{rolesLine(found) ?? "—"}</Field>}
+        <Field label={t.booked.when}>{`${formatKyiv(found.session.startsAt)} (Kyiv)`}</Field>
+        <Field label={t.booked.trainerLabel}>{found.session.trainer}</Field>
+        <Field label={t.booked.seats}>{t.find.freeSeats(found.free, found.capacity)}</Field>
+        {found.roles.length > 0 && (
+          <Field label={t.booked.rolesLabel}>{rolesLine(found) ?? "—"}</Field>
+        )}
       </Fields>
       {!bookable.ok && bookable.explanation && (
         <Section>
           <Markdown>{`⚠️ ${bookable.explanation}`}</Markdown>
         </Section>
       )}
-      <Context>{`Починається ${formatLeadTime(now, found.session.startsAt)}`}</Context>
+      <Context>{formatLeadTime(now, found.session.startsAt)}</Context>
     </Message>
   );
 }
@@ -180,53 +194,86 @@ export function bookingConfirmation(
 ) {
   return (
     <Message accent={ACCENT.good}>
-      <Header>✅ Заброньовано</Header>
+      <Header>{t.booked.header}</Header>
       <Fields>
-        <Field label="Практика">{found.type.title}</Field>
-        <Field label="Коли">{`${formatKyiv(found.session.startsAt)} (Київ)`}</Field>
-        <Field label="Тренер">{found.session.trainer}</Field>
-        {opts.role && <Field label="Роль">{ROLE_LABEL[opts.role]}</Field>}
-        <Field label="Zoom">{found.session.zoomUrl}</Field>
+        <Field label={t.booked.practice}>
+          {practiceTitle(found.type.code, found.type.title)}
+        </Field>
+        <Field label={t.booked.when}>{`${formatKyiv(found.session.startsAt)} (Kyiv)`}</Field>
+        <Field label={t.booked.trainerLabel}>{found.session.trainer}</Field>
+        {opts.role && <Field label={t.booked.roleLabel}>{roleName(opts.role)}</Field>}
+        <Field label={t.booked.zoom}>{found.session.zoomUrl}</Field>
       </Fields>
       {opts.isExtra && (
         <Section>
-          <Markdown>
-            Це бронювання **понад річну норму** — воно дозволене, бо до початку менше 24 годин і місце залишалось вільним.
-          </Markdown>
+          <Markdown>{t.booked.extraNote}</Markdown>
         </Section>
       )}
-      <Context>{`Бронювання #${opts.bookingId} · нагадаю за годину до початку`}</Context>
+      <Context>{t.booked.reminderNote(opts.bookingId)}</Context>
+      <Actions>
+        <Button value={cb.bookings()}>{t.menu.bookings}</Button>
+        <Button value={cb.menu()}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }
 
-export function bookingsCard(bookings: BookingView[], now: Date) {
+/**
+ * The student's upcoming bookings.
+ *
+ * `withActions` adds a Cancel/Reschedule pair per booking. The AI path posts the
+ * same card, so a student who asked by typing gets the same buttons as one who
+ * arrived through the menu.
+ */
+export function bookingsCard(bookings: BookingView[], now: Date, opts: { withActions?: boolean } = {}) {
   if (bookings.length === 0) {
     return (
       <Message accent={ACCENT.warn}>
-        <Header>Немає активних бронювань</Header>
+        <Header>{t.bookings.header}</Header>
         <Section>
-          <Markdown>Напиши, яка практика потрібна — підберу вільні сесії.</Markdown>
+          <Markdown>{t.bookings.empty}</Markdown>
         </Section>
+        <Actions>
+          <Button value={cb.find()}>{t.menu.find}</Button>
+          <Button value={cb.menu()}>{t.menu.back}</Button>
+        </Actions>
       </Message>
     );
   }
+
+  const withActions = opts.withActions ?? true;
+
   return (
     <Message accent={ACCENT.brand}>
-      <Header>Мої бронювання</Header>
-      {bookings.map((booking) => (
+      <Header>{t.bookings.header}</Header>
+      {bookings.map((booking, index) => (
         <Section>
           <Markdown>
             {[
-              `**${booking.practiceTitle}**${booking.role ? ` · ${ROLE_LABEL[booking.role]}` : ""}`,
-              `${formatKyiv(booking.session.startsAt)} (Київ) · ${formatLeadTime(now, booking.session.startsAt)}`,
-              `Тренер: ${booking.session.trainer}`,
-              `Бронювання #${booking.id}${booking.isExtra ? " · понад норму" : ""}`,
+              `${index + 1}. **${practiceTitle(booking.session.practiceTypeCode, booking.practiceTitle)}**${
+                booking.role ? ` · ${roleName(booking.role)}` : ""
+              }`,
+              `${formatKyiv(booking.session.startsAt)} (Kyiv) · ${formatLeadTime(now, booking.session.startsAt)}`,
+              t.find.trainer(booking.session.trainer),
+              `${t.bookings.bookingId(booking.id)}${booking.isExtra ? ` · ${t.bookings.extra}` : ""}`,
             ].join("\n")}
           </Markdown>
         </Section>
       ))}
-      <Context>Щоб скасувати або перенести — просто напиши, яке саме.</Context>
+      <Context>{t.find.kyivNote}</Context>
+      {withActions && (
+        <Actions>
+          {bookings.slice(0, 3).flatMap((booking, index) => [
+            <Button value={cb.cancelAsk(booking.id)}>
+              {`${index + 1}. ${t.bookings.cancel}`}
+            </Button>,
+            <Button value={cb.reschedule(booking.id)}>
+              {`${index + 1}. ${t.bookings.reschedule}`}
+            </Button>,
+          ])}
+          <Button value={cb.menu()}>{t.menu.back}</Button>
+        </Actions>
+      )}
     </Message>
   );
 }
@@ -234,12 +281,18 @@ export function bookingsCard(bookings: BookingView[], now: Date) {
 export function cancellationCard(booking: BookingView) {
   return (
     <Message accent={ACCENT.warn}>
-      <Header>Бронювання скасовано</Header>
+      <Header>{t.cancelled.header}</Header>
       <Fields>
-        <Field label="Практика">{booking.practiceTitle}</Field>
-        <Field label="Коли">{`${formatKyiv(booking.session.startsAt)} (Київ)`}</Field>
+        <Field label={t.booked.practice}>
+          {practiceTitle(booking.session.practiceTypeCode, booking.practiceTitle)}
+        </Field>
+        <Field label={t.booked.when}>{`${formatKyiv(booking.session.startsAt)} (Kyiv)`}</Field>
       </Fields>
-      <Context>Місце звільнено, прогрес оновлено.</Context>
+      <Context>{t.cancelled.note}</Context>
+      <Actions>
+        <Button value={cb.find()}>{t.menu.find}</Button>
+        <Button value={cb.menu()}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }
@@ -247,18 +300,22 @@ export function cancellationCard(booking: BookingView) {
 export function rescheduleCard(from: BookingView, to: Availability, role: Role | null) {
   return (
     <Message accent={ACCENT.good}>
-      <Header>🔄 Перенесено</Header>
+      <Header>{t.rescheduled.header}</Header>
       <Section>
         <Markdown>
-          {`Було: ${formatKyiv(from.session.startsAt)}\n➡️ Стало: **${formatKyiv(to.session.startsAt)}** (Київ)`}
+          {`${t.rescheduled.from(formatKyiv(from.session.startsAt))}\n➡️ ${t.rescheduled.to(formatKyiv(to.session.startsAt))}`}
         </Markdown>
       </Section>
       <Fields>
-        <Field label="Практика">{to.type.title}</Field>
-        <Field label="Тренер">{to.session.trainer}</Field>
-        {role && <Field label="Роль">{ROLE_LABEL[role]}</Field>}
-        <Field label="Zoom">{to.session.zoomUrl}</Field>
+        <Field label={t.booked.practice}>{practiceTitle(to.type.code, to.type.title)}</Field>
+        <Field label={t.booked.trainerLabel}>{to.session.trainer}</Field>
+        {role && <Field label={t.booked.roleLabel}>{roleName(role)}</Field>}
+        <Field label={t.booked.zoom}>{to.session.zoomUrl}</Field>
       </Fields>
+      <Actions>
+        <Button value={cb.bookings()}>{t.menu.bookings}</Button>
+        <Button value={cb.menu()}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }
@@ -267,36 +324,34 @@ export function rescheduleCard(from: BookingView, to: Availability, role: Role |
 export function reminderCard(booking: BookingView) {
   return (
     <Message accent={ACCENT.brand}>
-      <Header>⏰ Практика за годину</Header>
+      <Header>{t.reminder.header}</Header>
       <Fields>
-        <Field label="Практика">{booking.practiceTitle}</Field>
-        <Field label="Початок">{`${formatKyiv(booking.session.startsAt)} (Київ)`}</Field>
-        <Field label="Тренер">{booking.session.trainer}</Field>
-        {booking.role && <Field label="Твоя роль">{ROLE_LABEL[booking.role]}</Field>}
+        <Field label={t.reminder.practice}>
+          {practiceTitle(booking.session.practiceTypeCode, booking.practiceTitle)}
+        </Field>
+        <Field label={t.reminder.starts}>{`${formatKyiv(booking.session.startsAt)} (Kyiv)`}</Field>
+        <Field label={t.reminder.trainerLabel}>{booking.session.trainer}</Field>
+        {booking.role && <Field label={t.reminder.yourRole}>{roleName(booking.role)}</Field>}
       </Fields>
       <Actions>
-        <Button url={booking.session.zoomUrl}>Приєднатися в Zoom</Button>
+        <Button url={booking.session.zoomUrl}>{t.reminder.join}</Button>
       </Actions>
     </Message>
   );
 }
 
-export function welcomeMessage() {
+/** Shown to a Telegram account that is not on the roster yet. */
+export function linkPrompt() {
   return (
     <Message accent={ACCENT.brand}>
-      <Header>Practice Agent</Header>
+      <Header>{t.link.header}</Header>
       <Section>
-        <Markdown>
-          {"Я координатор практик. Знаю твій прогрес, розклад і правила бронювання — " +
-            "просто напиши, що тобі потрібно.\n\n" +
-            "_«Потрібна практика наступного тижня після 18:00»_\n" +
-            "_«Скільки міжмодульних мені ще треба?»_\n" +
-            "_«Перенеси мене на середу»_"}
-        </Markdown>
+        <Markdown>{t.link.intro}</Markdown>
       </Section>
-      <Context>
-        Щоб почати, надішли свій номер телефону — той, що є у списку студентів.
-      </Context>
+      <Section>
+        <Markdown>{t.link.ask}</Markdown>
+      </Section>
+      <Context>{t.link.typedFallback}</Context>
     </Message>
   );
 }
@@ -304,15 +359,29 @@ export function welcomeMessage() {
 export function linkedCard(studentName: string, progress: Progress[]) {
   return (
     <Message accent={ACCENT.good}>
-      <Header>Вітаю, {studentName}!</Header>
+      <Header>{t.link.welcomeHeader(studentName)}</Header>
       <Section>
-        <Markdown>Акаунт підключено. Ось твій поточний прогрес:</Markdown>
+        <Markdown>{t.link.linked}</Markdown>
       </Section>
       {progress.map((entry) => (
         <Section>
-          <Markdown>{`**${entry.title}**\n\`${progressLine(entry)}\``}</Markdown>
+          <Markdown>{`**${practiceTitle(entry.code, entry.title)}**\n\`${progressLine(entry)}\``}</Markdown>
         </Section>
       ))}
+    </Message>
+  );
+}
+
+/** A refusal the student can act on, with a way back. */
+export function refusalCard(message: string, back: string) {
+  return (
+    <Message accent={ACCENT.bad}>
+      <Section>
+        <Markdown>{`⚠️ ${message}`}</Markdown>
+      </Section>
+      <Actions>
+        <Button value={back}>{t.menu.back}</Button>
+      </Actions>
     </Message>
   );
 }

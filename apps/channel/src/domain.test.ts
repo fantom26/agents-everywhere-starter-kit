@@ -225,7 +225,7 @@ describe("quota and the 24-hour rule", () => {
 
   it("frees the quota again when a booking is cancelled", () => {
     fillQuota();
-    const mine = getBookings(db, ME, { now: NOW }).filter((b) => b.practiceTitle.includes("Міжмодульні"));
+    const mine = getBookings(db, ME, { now: NOW }).filter((b) => b.session.practiceTypeCode === "intermodule");
     cancelBooking(db, { studentId: ME, bookingId: mine[0].id }, NOW);
     const progress = getProgress(db, ME).find((p) => p.code === "intermodule")!;
     assert.equal(progress.remaining, 1);

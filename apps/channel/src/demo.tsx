@@ -23,7 +23,7 @@ const { renderToIR } = await import("@copilotkit/channels");
 const { renderTelegram } = await import("@copilotkit/channels/telegram");
 const { db } = await import("./db");
 const { seedDatabase } = await import("./seed");
-const { welcomeMessage } = await import("./components");
+const { linkPrompt } = await import("./components");
 const { sendDueReminders } = await import("./reminders");
 const {
   linkStudentAccount,
@@ -89,7 +89,7 @@ let step = 0;
 function says(who: "student" | "agent", text: string) {
   if (who === "student") {
     step += 1;
-    console.log(`\n[36m${step}. Студент:[0m ${text}`);
+    console.log(`\n[36m${step}. Student:[0m ${text}`);
   } else {
     console.log(`   [33m→ tool:[0m ${text}`);
   }
@@ -111,7 +111,7 @@ console.log(`   database: ${process.env.PRACTICE_DB_PATH}`);
 
 // ---------------------------------------------------------------- 1. /start
 says("student", "/start");
-await thread.post(welcomeMessage());
+await thread.post(linkPrompt());
 
 // ---------------------------------------------------------------- 2. linking
 says("student", "0501112233");
@@ -119,7 +119,7 @@ says("agent", "link_student_account({ phone: '0501112233' })");
 toolResult("link_student_account", await linkStudentAccount.handler({ phone: "0501112233" }, ctx));
 
 // ---------------------------------------------------------------- 3. search
-says("student", "Потрібна практика наступного тижня після 18:00");
+says("student", "I need a practice next week after 18:00");
 says("agent", "search_available_practices({ practiceType: 'intermodule', afterTime: '18:00', limit: 3 })");
 const search = await searchAvailablePractices.handler(
   { practiceType: "intermodule", afterTime: "18:00", limit: 3 },
@@ -129,17 +129,17 @@ toolResult("search_available_practices", search);
 const options = (search as { sessions: { sessionId: number }[] }).sessions;
 
 // ---------------------------------------------------------------- 4. booking
-says("student", "Забронюй мене на першу");
+says("student", "Book me on the first one");
 says("agent", `book_practice({ sessionId: ${options[0].sessionId} })`);
 toolResult("book_practice", await bookPracticeTool.handler({ sessionId: options[0].sessionId }, ctx));
 
 // ---------------------------------------------------------------- 5. progress
-says("student", "Скільки міжмодульних мені ще треба?");
+says("student", "How many intermodule meetings do I still need?");
 says("agent", "get_my_progress()");
 toolResult("get_my_progress", await getMyProgress.handler({}, ctx));
 
 // ------------------------------------------------- 6. mentoring role refusal
-says("student", "Хочу на груповий менторинг як коуч");
+says("student", "I want group mentoring as the coach");
 says("agent", `get_practice_details({ sessionId: ${seed.mentoringSessionId}, role: 'coach' })`);
 toolResult(
   "get_practice_details",
@@ -180,16 +180,16 @@ const farAway = (more as { sessions: { sessionId: number; startsAtUtc: string }[
     new Date(option.startsAtUtc).getTime() - Date.now() > 24 * HOUR_MS,
 );
 
-says("student", "Хочу ще одну міжмодульну наступного тижня");
+says("student", "I want one more intermodule meeting next week");
 says("agent", `book_practice({ sessionId: ${farAway!.sessionId} }) — beyond quota, more than 24h out`);
 toolResult("book_practice", await bookPracticeTool.handler({ sessionId: farAway!.sessionId }, ctx));
 
-says("student", "А на ту, що сьогодні ввечері?");
+says("student", "What about the one this evening?");
 says("agent", `book_practice({ sessionId: ${seed.soonSessionId} }) — beyond quota, inside 24h`);
 toolResult("book_practice", await bookPracticeTool.handler({ sessionId: seed.soonSessionId }, ctx));
 
 // ---------------------------------------------------------- 8. reschedule
-says("student", "Покажи мої бронювання");
+says("student", "Show my bookings");
 says("agent", "get_my_bookings()");
 const mine = (await getMyBookings.handler({}, ctx)) as {
   bookings: { bookingId: number; sessionId: number }[];
@@ -200,7 +200,7 @@ const moveTarget = (more as { sessions: { sessionId: number }[] }).sessions.find
 );
 const movable = mine.bookings.find((booking) => booking.sessionId !== seed.soonSessionId)!;
 if (moveTarget) {
-  says("student", "Перенеси одне бронювання на іншу дату");
+  says("student", "Move one of my bookings to another date");
   says("agent", `reschedule_booking({ bookingId: ${movable.bookingId}, newSessionId: ${moveTarget.sessionId} })`);
   toolResult(
     "reschedule_booking",
@@ -221,7 +221,7 @@ const triosBooking = (await bookPracticeTool.handler(
   ctx,
 )) as { bookingId: number };
 
-says("student", "Перенеси мою трійку на ту сесію, що вже заповнена");
+says("student", "Move my trio practice onto the session that is already full");
 says("agent", `reschedule_booking({ bookingId: ${triosBooking.bookingId}, newSessionId: ${seed.fullSessionId} }) — the full one`);
 toolResult(
   "reschedule_booking",
@@ -240,7 +240,7 @@ console.log(
 );
 
 // ---------------------------------------------------------- 10. cancellation
-says("student", "Скасуй останнє");
+says("student", "Cancel the last one");
 const last = stillThere.bookings.at(-1)!;
 says("agent", `cancel_booking({ bookingId: ${last.bookingId} })`);
 toolResult("cancel_booking", await cancelBookingTool.handler({ bookingId: last.bookingId }, ctx));

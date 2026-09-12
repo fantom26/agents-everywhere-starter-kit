@@ -8,6 +8,8 @@
  * a year, so the offset is probed from the IANA database at the instant in
  * question.
  */
+import { t } from "./strings";
+
 export const KYIV = "Europe/Kyiv";
 
 const FIELDS = new Intl.DateTimeFormat("en-US", {
@@ -107,33 +109,75 @@ export function kyivDateKey(instant: Date): string {
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-const WEEKDAY = new Intl.DateTimeFormat("uk-UA", {
+const LOCALE = "en-GB";
+
+const WEEKDAY = new Intl.DateTimeFormat(LOCALE, {
   timeZone: KYIV,
   weekday: "long",
 });
 
-const DAY_MONTH = new Intl.DateTimeFormat("uk-UA", {
+const DAY_MONTH = new Intl.DateTimeFormat(LOCALE, {
   timeZone: KYIV,
   day: "numeric",
   month: "long",
 });
 
-/** How a session start is shown to a student: "середа, 17 вересня, 18:30". */
+/** Short enough for a button label: "Tue 15 Sep". */
+const SHORT_DAY = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: KYIV,
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
+/** How a session start is shown to a student: "Wednesday, 17 September, 18:30". */
 export function formatKyiv(instant: Date): string {
   const { hour, minute } = kyivWallClock(instant);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${WEEKDAY.format(instant)}, ${DAY_MONTH.format(instant)}, ${pad(hour)}:${pad(minute)}`;
 }
 
-/** "за 3 год 20 хв" — how far away a session is, for the 24-hour rule. */
+/** The label a date button carries. */
+export function formatKyivDayShort(instant: Date): string {
+  return SHORT_DAY.format(instant);
+}
+
+/** "in 3 h 20 min" — how far away a session is, for the 24-hour rule. */
 export function formatLeadTime(from: Date, to: Date): string {
   const minutes = Math.round((to.getTime() - from.getTime()) / 60_000);
-  if (minutes < 0) return "вже почалася";
-  if (minutes < 60) return `за ${minutes} хв`;
+  if (minutes < 0) return t.time.started;
+  if (minutes < 60) return t.time.inMinutes(minutes);
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  if (hours < 24) return rest ? `за ${hours} год ${rest} хв` : `за ${hours} год`;
-  return `за ${Math.floor(hours / 24)} дн ${hours % 24} год`;
+  if (hours < 24) return t.time.inHours(hours, rest);
+  return t.time.inDays(Math.floor(hours / 24), hours % 24);
+}
+
+const WEEKDAY_INDEX = new Intl.DateTimeFormat("en-US", { timeZone: KYIV, weekday: "short" });
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** 0 for Monday … 6 for Sunday, in Kyiv. */
+function kyivWeekdayIndex(instant: Date): number {
+  return Math.max(0, DAYS.indexOf(WEEKDAY_INDEX.format(instant)));
+}
+
+/**
+ * The Kyiv bounds of "this week" or "next week".
+ *
+ * Weeks run Monday to Sunday, and "this week" starts now rather than at
+ * Monday's midnight — a student asking on Thursday means the days they can
+ * still attend, not the ones that have gone.
+ */
+export function kyivWeekWindow(now: Date, which: "this" | "next"): { fromUtc: Date; toUtc: Date } {
+  const wall = kyivWallClock(now);
+  const weekday = kyivWeekdayIndex(now);
+  const monday = kyivToUtc(wall.year, wall.month, wall.day);
+  const mondayMs = monday.getTime() - weekday * DAY_MS;
+
+  const startMs = which === "this" ? Math.max(now.getTime(), mondayMs) : mondayMs + 7 * DAY_MS;
+  const endMs = (which === "this" ? mondayMs : mondayMs + 7 * DAY_MS) + 7 * DAY_MS;
+
+  return { fromUtc: new Date(startMs), toUtc: new Date(endMs) };
 }
 
 export const HOUR_MS = 60 * 60 * 1000;
