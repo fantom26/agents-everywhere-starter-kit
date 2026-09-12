@@ -35,7 +35,10 @@ const {
   cancelBookingTool,
   rescheduleBookingTool,
 } = await import("./tools");
-const { availability } = await import("./domain");
+const { availability, getBookings, searchSessions } = await import("./domain");
+const { route } = await import("./router");
+const { cb } = await import("./callbacks");
+const { linkByContact } = await import("./services");
 const { HOUR_MS } = await import("./time");
 
 const TELEGRAM_USER_ID = "424242";
@@ -114,9 +117,62 @@ says("student", "/start");
 await thread.post(linkPrompt());
 
 // ---------------------------------------------------------------- 2. linking
+says("student", "[taps 📱 Share my phone number]");
+console.log("   \x1b[33m→ Telegram sends a verified contact; no tool, no model\x1b[0m");
+const shared = linkByContact(database, TELEGRAM_USER_ID, {
+  phoneNumber: "+380501112233",
+  userId: Number(TELEGRAM_USER_ID),
+});
+console.log(
+  `   \x1b[32m✓ linked to ${shared.ok ? shared.student.fullName : "nobody"} — and it stays linked\x1b[0m`,
+);
 says("student", "0501112233");
-says("agent", "link_student_account({ phone: '0501112233' })");
+says("agent", "link_student_account({ phone: '0501112233' }) — the typed fallback, still idempotent");
 toolResult("link_student_account", await linkStudentAccount.handler({ phone: "0501112233" }, ctx));
+
+
+// ------------------------------------------- the button product, with no model
+//
+// Everything below this banner happens with no API key, no model call, and no
+// sentence to interpret: a payload goes in, a screen comes out. It is the same
+// `services.ts` the tools above call, so the rules are not re-implemented — the
+// parity tests assert exactly that.
+console.log("\n\x1b[1m── The whole product, by tapping buttons: no model involved ──\x1b[0m");
+
+function taps(label: string, payload: string) {
+  console.log(`\n\x1b[36m   [tap]\x1b[0m ${label}  \x1b[2m(${payload})\x1b[0m`);
+  const rendered = route(database, TELEGRAM_USER_ID, payload);
+  const out = renderTelegram(renderToIR(rendered.card as never));
+  const keyboard = (out.inlineKeyboard ?? [])
+    .flat()
+    .map((button) => `[ ${button.text}${button.url ? ` \u2192 ${button.url}` : ""} ]`)
+    .join(" ");
+  console.log(indent(htmlToTerminal(out.text)));
+  if (keyboard) console.log(indent(keyboard));
+  return rendered;
+}
+
+taps("/start, already linked", cb.menu());
+taps("📅 Find practice", cb.find());
+taps("Trio practice", cb.findPeriod("trios"));
+taps("Next week", cb.findSlots("trios", "n"));
+
+const triosNextWeek = searchSessions(database, { practiceTypeCode: "trios", limit: 1 });
+taps("the first session offered", cb.book(triosNextWeek[0].session.id));
+taps("📊 My progress", cb.progress());
+taps("📚 My bookings", cb.bookings());
+
+const buttonBooking = getBookings(database, 1).find(
+  (booking) => booking.sessionId === triosNextWeek[0].session.id,
+)!;
+taps("Cancel", cb.cancelAsk(buttonBooking.id));
+taps("Yes, cancel it", cb.cancelDo(buttonBooking.id));
+
+// The screen the brief singled out: a role that is taken is shown, but it is
+// text. Only the free roles are buttons.
+taps("a group mentoring session whose coach seat is taken", cb.session(seed.mentoringSessionId));
+
+console.log("\n\x1b[1m── The same system, reached by talking to it ──\x1b[0m");
 
 // ---------------------------------------------------------------- 3. search
 says("student", "I need a practice next week after 18:00");
