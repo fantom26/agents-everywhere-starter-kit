@@ -34,8 +34,17 @@ const ACCENT = {
   warn: "#8A5C10",
 } as const;
 
-/** The root. Everything is at most three taps from here. */
-export function mainMenu(studentName: string, progress: Progress[]) {
+/**
+ * The root. Everything is at most three taps from here.
+ *
+ * `calendar` is omitted entirely when Google is not configured — an entry that
+ * leads to "this is switched off" is worse than no entry.
+ */
+export function mainMenu(
+  studentName: string,
+  progress: Progress[],
+  options: { calendar?: boolean } = {},
+) {
   const outstanding = progress.filter((entry) => !entry.complete);
   return (
     <Message accent={ACCENT.brand}>
@@ -61,6 +70,7 @@ export function mainMenu(studentName: string, progress: Progress[]) {
         <Button value={cb.progress()}>{t.menu.progress}</Button>
         <Button value={cb.bookings()}>{t.menu.bookings}</Button>
         <Button value={cb.info()}>{t.menu.info}</Button>
+        {options.calendar && <Button value={cb.calendar()}>{t.calendar.menu}</Button>}
       </Actions>
     </Message>
   );
@@ -368,6 +378,40 @@ export function infoScreen(types: PracticeType[]) {
         <Markdown>{`${t.info.progressRule}\n${t.info.reminderRule}`}</Markdown>
       </Section>
       <Actions>
+        <Button value={cb.menu()}>{t.menu.back}</Button>
+      </Actions>
+    </Message>
+  );
+}
+
+/**
+ * Google Calendar: what it does, and the one-time consent link.
+ *
+ * The link is a URL button — Telegram opens it in a browser, the student
+ * approves, and comes back. It is minted per tap and short-lived, so this screen
+ * is rendered fresh rather than kept around.
+ */
+export function calendarScreen(state: {
+  configured: boolean;
+  connected: boolean;
+  connectUrl?: string;
+}) {
+  return (
+    <Message accent={state.connected ? ACCENT.good : ACCENT.brand}>
+      <Header>{t.calendar.header}</Header>
+      <Section>
+        <Markdown>{state.configured ? t.calendar.what : t.calendar.unavailable}</Markdown>
+      </Section>
+      {state.connected && (
+        <Section>
+          <Markdown>{t.calendar.connected}</Markdown>
+        </Section>
+      )}
+      {state.configured && !state.connected && <Context>{t.calendar.forwardOnly}</Context>}
+      <Actions>
+        {!state.connected && state.connectUrl && (
+          <Button url={state.connectUrl}>{t.calendar.connect}</Button>
+        )}
         <Button value={cb.menu()}>{t.menu.back}</Button>
       </Actions>
     </Message>

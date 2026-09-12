@@ -193,3 +193,65 @@ describe("calendar sync", () => {
     assert.equal(noopCalendar.connected(db, ME), false, "the no-op is never connected");
   });
 });
+
+describe("the consent round trip", () => {
+  const env = { ...process.env };
+
+  afterEach(() => {
+    process.env.GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID;
+    process.env.GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET;
+    process.env.PUBLIC_BASE_URL = env.PUBLIC_BASE_URL;
+  });
+
+  const configure = () => {
+    process.env.GOOGLE_CLIENT_ID = "client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "client-secret";
+    process.env.PUBLIC_BASE_URL = "https://example.test";
+  };
+
+  const unconfigure = () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.PUBLIC_BASE_URL;
+  };
+
+  it("offers no link at all when Google is not configured", async () => {
+    unconfigure();
+    const { connectUrl, oauthConfigured } = await import("./google-oauth");
+    assert.equal(oauthConfigured(), false);
+    assert.equal(connectUrl(TG), undefined);
+  });
+
+  it("asks for offline access, or the grant would last an hour", async () => {
+    configure();
+    const { connectUrl } = await import("./google-oauth");
+
+    const url = new URL(connectUrl(TG)!);
+    assert.equal(url.origin + url.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+    assert.equal(url.searchParams.get("access_type"), "offline");
+    assert.equal(url.searchParams.get("prompt"), "consent");
+    assert.equal(
+      url.searchParams.get("redirect_uri"),
+      "https://example.test/oauth/google/callback",
+    );
+    assert.match(url.searchParams.get("scope") ?? "", /calendar\.events$/);
+  });
+
+  it("never puts the Telegram id in the link", async () => {
+    configure();
+    const { connectUrl } = await import("./google-oauth");
+
+    const url = connectUrl(TG)!;
+    assert.ok(!url.includes(TG), `the state must be opaque:\n${url}`);
+    const state = new URL(url).searchParams.get("state");
+    assert.ok(state && state.length >= 16, "and unguessable");
+  });
+
+  it("mints a fresh state per tap", async () => {
+    configure();
+    const { connectUrl } = await import("./google-oauth");
+    const first = new URL(connectUrl(TG)!).searchParams.get("state");
+    const second = new URL(connectUrl(TG)!).searchParams.get("state");
+    assert.notEqual(first, second);
+  });
+});

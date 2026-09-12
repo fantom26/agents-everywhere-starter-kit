@@ -16,6 +16,8 @@ import { required } from "./env";
 import { db, dbPath } from "./db";
 import { seedDatabase } from "./seed";
 import { startReminderScheduler } from "./reminders";
+import { calendarFromEnv, setCalendar } from "./calendar";
+import { handleOAuthRequest, oauthConfigured } from "./google-oauth";
 
 const intelligence = new CopilotKitIntelligence({
   apiKey: required("INTELLIGENCE_API_KEY"),
@@ -48,9 +50,22 @@ const shutdown = async () => {
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
 
+// Google Calendar, when it is configured. Unconfigured is a supported state:
+// the no-op writes nothing and the menu entry does not appear.
+setCalendar(calendarFromEnv());
+
 const listener = createCopilotNodeListener({ runtime, basePath: "/api/copilotkit" });
 const channels = listener.channels;
-const server = createServer(listener);
+
+// The consent round trip rides on the server the runtime needs anyway — a
+// Channel owns a long-lived process, so there is no second service here and no
+// separate backend for the button UI. OAuth paths are claimed first; everything
+// else goes to the listener untouched.
+const server = createServer((req, res) => {
+  void handleOAuthRequest(req, res, database).then((handled) => {
+    if (!handled) listener(req, res);
+  });
+});
 
 const stopReminders = startReminderScheduler({
   db: database,
@@ -90,5 +105,12 @@ const port = Number(process.env.PORT ?? 3000);
 server.listen(port, () => {
   console.log(`\n  ✓ Practice Agent online — listening on :${port}`);
   console.log(`    Database: ${dbPath()}`);
+  console.log(
+    `    Google Calendar: ${
+      oauthConfigured()
+        ? `on, consent at ${process.env.PUBLIC_BASE_URL}/oauth/google/callback`
+        : "off (set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and PUBLIC_BASE_URL)"
+    }`,
+  );
   console.log(`    Open Telegram, find your bot, and send /start.\n`);
 });

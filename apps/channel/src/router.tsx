@@ -26,6 +26,7 @@ import {
   sessionOptions,
 } from "./components";
 import {
+  calendarScreen,
   cancelConfirm,
   datePicker,
   infoScreen,
@@ -38,6 +39,8 @@ import {
   typePicker,
 } from "./screens";
 import { t, practiceTitle } from "./strings";
+import { calendar } from "./calendar";
+import { connectUrl, oauthConfigured } from "./google-oauth";
 import { formatKyiv, kyivDateKey, kyivWeekWindow, parseKyivDate, DAY_MS } from "./time";
 import type { Availability, BookingView, Refusal } from "./domain";
 
@@ -129,7 +132,9 @@ export function route(
 export function linkOrMenu(db: Db, telegramUserId: string): Card {
   const progress = services.progressFor(db, telegramUserId);
   if (!progress.linked) return linkPrompt();
-  return mainMenu(progress.student.fullName, progress.progress);
+  return mainMenu(progress.student.fullName, progress.progress, {
+    calendar: oauthConfigured(),
+  });
 }
 
 function handle(db: Db, telegramUserId: string, action: Action, now: Date): Rendered {
@@ -142,6 +147,19 @@ function handle(db: Db, telegramUserId: string, action: Action, now: Date): Rend
 
     case "info":
       return nav(infoScreen(services.practiceTypes(db)));
+
+    case "calendar": {
+      const student = services.resolveCaller(db, telegramUserId);
+      if (!student) return { card: linkPrompt(), mode: "send" };
+      return nav(
+        calendarScreen({
+          configured: oauthConfigured(),
+          connected: calendar().connected(db, student.id),
+          // Minted here, per tap: a consent link is worth minutes, not hours.
+          connectUrl: connectUrl(telegramUserId),
+        }),
+      );
+    }
 
     case "progress": {
       const result = services.progressFor(db, telegramUserId);

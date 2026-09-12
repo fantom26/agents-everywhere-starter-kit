@@ -171,6 +171,17 @@ export const en = {
     reminderRule: "I message you an hour before every session you have booked.",
   },
 
+  calendar: {
+    menu: "📅 Google Calendar",
+    header: "Google Calendar",
+    what:
+      "Connect your calendar and every practice you book appears in it — and disappears again when you cancel.",
+    connect: "Connect Google Calendar",
+    connected: "✅ Connected. New bookings will appear in your calendar.",
+    forwardOnly: "Bookings you made before connecting stay where they are.",
+    unavailable: "Calendar sync is switched off on this deployment.",
+  },
+
   errors: {
     expired: "That button is out of date. Here is the menu again.",
     notLinked: "I do not know who you are yet — share your phone number and we can start.",

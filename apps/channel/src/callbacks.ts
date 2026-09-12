@@ -52,6 +52,7 @@ export type Action =
   | { kind: "reschedulePeriod"; bookingId: number; period: Period }
   | { kind: "rescheduleDo"; bookingId: number; sessionId: number }
   | { kind: "info" }
+  | { kind: "calendar" }
   | { kind: "noop" };
 
 /**
@@ -77,6 +78,7 @@ export const cb = {
   reschedulePeriod: (bookingId: number, period: Period) => `x:${bookingId}:${period}`,
   rescheduleDo: (bookingId: number, sessionId: number) => `X:${bookingId}:${sessionId}`,
   info: () => "i",
+  calendar: () => "g",
   noop: () => "noop",
 } as const;
 
@@ -142,6 +144,8 @@ export function decode(raw: string | undefined): Action | undefined {
       return { kind: "bookings" };
     case "i":
       return { kind: "info" };
+    case "g":
+      return { kind: "calendar" };
     case "noop":
       return { kind: "noop" };
 
