@@ -62,7 +62,7 @@ const done = (card: Card, toast?: string): Rendered => ({ card, mode: "send", to
 const PAGE = 6;
 
 /** The student-facing sentence for a domain refusal, with Kyiv times formatted. */
-function refusalText(reason: Refusal, facts: Record<string, unknown>): string {
+export function refusalText(reason: Refusal, facts: Record<string, unknown>): string {
   const from = typeof facts.bookableFrom === "string" ? new Date(facts.bookableFrom) : undefined;
   return t.refusal(reason, facts, {
     bookableFrom: from && !Number.isNaN(from.getTime()) ? formatKyiv(from) : undefined,
