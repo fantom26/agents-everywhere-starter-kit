@@ -1,22 +1,28 @@
+/**
+ * The Channel, wired to Telegram.
+ *
+ * The starter kit ships this app pointed at managed Slack. Telegram is a direct
+ * adapter instead: `telegram()` holds the bot token and long-polls, so there is
+ * no tunnel and no webhook to expose for a demo. The runtime still owns the
+ * lifecycle either way — there is no `channel.start()`.
+ */
 import { createChannel } from "@copilotkit/channels";
-import { isSearchConfigured, isWorkplaceConfigured, WORKPLACE_CONTEXT } from "agent-core";
+import { telegram, defaultTelegramContext } from "@copilotkit/channels/telegram";
 import { makeChannelAgent } from "./agent";
 import { required } from "./env";
-import { IncidentCard, Timeline, welcomeMessage } from "./components";
-import { proposeAction, readThread, searchTheWeb } from "./tools";
+import { welcomeMessage } from "./components";
+import { practiceTools, todayContext } from "./tools";
 
-// Tools are registered only when their credential is present, so the agent is
-// never handed a tool that will fail when it calls it.
-const tools = [
-  readThread,
-  proposeAction,
-  ...(isSearchConfigured() ? [searchTheWeb] : []),
-];
+export const telegramAdapter = telegram({
+  token: required("TELEGRAM_BOT_TOKEN"),
+  // Long-polling: no public URL, no tunnel. Switch to webhook only for a deploy.
+  mode: "polling",
+  // Booking takes a few database round-trips; showing the tool it is running
+  // makes the wait legible instead of looking hung.
+  showToolStatus: true,
+});
 
 export const channel = createChannel({
-  // Must equal the Channel Code in Intelligence, character for character. A
-  // mismatch leaves the Channel at "Waiting for runtime" and is validated at
-  // startup, not here.
   name: required("CHANNEL_CODE"),
 
   // Required. "platform" derives the canonical user from provider + workspace +
@@ -24,45 +30,39 @@ export const channel = createChannel({
   // web requests and must be absent on a Channels-only runtime.
   identifyUser: "platform",
 
+  adapters: [telegramAdapter],
   agent: makeChannelAgent,
-  tools,
-  components: [IncidentCard, Timeline],
+  tools: practiceTools,
 
-  // Injected into the agent's prompt on every run.
   context: [
-    
-    {
-      description: "Rendering",
-      value:
-        "You can draw native UI by calling incident_card or timeline. Prefer them over prose whenever the answer has structure.",
-    },
-    ...(isWorkplaceConfigured()
-      ? [{ description: "Workplace", value: WORKPLACE_CONTEXT }]
-      : []),
+    // Telegram's own tagging, HTML, and conversation-model guidance.
+    ...defaultTelegramContext,
     {
       description: "Surface",
       value:
-        "This is a chat thread in a channel people are actively working in. Assume others are reading and that some joined late.",
+        "This is a private Telegram chat with one student. They are on a phone. Keep replies short enough to read without scrolling, and let the cards carry the detail.",
     },
   ],
-
 });
 
-// A mention subscribes the conversation, so the agent then follows along instead
-// of needing to be @-mentioned every single turn.
+// A student's chat with the bot is a one-to-one conversation, so every message
+// is meant for the agent — there is no channel full of other people's talk to
+// stay out of. Subscribing on the first mention keeps the group case sane too.
 channel.onMention(async ({ thread }) => {
   await thread.subscribe();
-  await thread.runAgent();
+  await thread.runAgent({ context: [todayContext()] });
 });
 
-// Non-mentioned turns only ever reach onMessage — gate them on the flag or the
-// agent will answer every message in every channel it has been invited to.
 channel.onMessage(async ({ thread }) => {
-  if (await thread.isSubscribed()) {
-    await thread.runAgent();
-  }
+  await thread.subscribe();
+  await thread.runAgent({ context: [todayContext()] });
 });
 
-channel.onWelcome(async ({ thread, platform }) => {
-  await thread.post(welcomeMessage(platform));
+// Telegram's /start in a private chat arrives here.
+channel.onThreadStarted(async ({ thread }) => {
+  await thread.post(welcomeMessage());
+});
+
+channel.onWelcome(async ({ thread }) => {
+  await thread.post(welcomeMessage());
 });

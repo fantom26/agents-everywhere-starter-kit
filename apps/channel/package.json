@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The agent, living in a Slack or Teams thread, via CopilotKit Channels.",
+  "description": "Practice Agent: the practice coordinator, living in Telegram, via CopilotKit Channels.",
   "scripts": {
-    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
-    "start": "node --env-file=../../.env --import tsx src/server.ts",
+    "dev": "node --env-file=../../.env --experimental-sqlite --import tsx --watch src/server.ts",
+    "start": "node --env-file=../../.env --experimental-sqlite --import tsx src/server.ts",
+    "seed": "node --env-file=../../.env --experimental-sqlite --import tsx src/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test 'src/**/*.test.tsx'"
+    "test": "node --experimental-sqlite --import tsx --test 'src/**/*.test.ts' 'src/**/*.test.tsx'",
+    "demo": "node --experimental-sqlite --import tsx src/demo.tsx"
   },
   "dependencies": {
     "@copilotkit/channels": "0.9.2",

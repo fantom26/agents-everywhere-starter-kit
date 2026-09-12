@@ -2,6 +2,7 @@ import { AbstractAgent } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput } from "@ag-ui/core";
 import { makeAgent } from "agent-core";
 import { Observable, type Subscription } from "rxjs";
+import { PRACTICE_AGENT_PROMPT } from "./prompt";
 
 type ChannelAgentFactory = (threadId: string) => AbstractAgent;
 
@@ -80,6 +81,16 @@ export class ChannelRunAgent extends AbstractAgent {
   }
 }
 
+/**
+ * The practice coordinator, one fresh agent per conversation.
+ *
+ * `workplace: false` keeps the shared workplace MCP tools out of this agent —
+ * the only tools it should ever see are the practice tools, so there is nothing
+ * it could call that would sidestep the booking rules.
+ */
 export function makeChannelAgent(threadId: string) {
-  return new ChannelRunAgent(makeAgent, threadId);
+  return new ChannelRunAgent(
+    (id) => makeAgent(id, { prompt: PRACTICE_AGENT_PROMPT, workplace: false }),
+    threadId,
+  );
 }
