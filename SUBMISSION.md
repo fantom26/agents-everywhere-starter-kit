@@ -2,9 +2,10 @@
 
 Choose your city on the [global event page](https://aitinkerers.org/hackathons/global/agents-everywhere). Use that city's participant portal for the submission deadline and published judging criteria, and its handbook for eligibility and required deliverables. See [hackathon-rules.md](hackathon-rules.md) for the agent-readable summary.
 
-> **Status:** the code is complete and verified offline. The live Telegram and
-> model checks in [Before recording](#before-recording) still need a bot token
-> and an API key, and are **not yet done** — do not claim them until they are.
+> **Status:** the code is complete and verified offline — 143 tests, 0 failures.
+> The live Telegram, model and Google Calendar checks in
+> [Before recording](#before-recording) still need credentials and are **not yet
+> done** — do not claim them until they are.
 
 ## Build eligibility
 
@@ -39,17 +40,23 @@ Everything that makes this a practice coordinator. New files, ~2,300 lines:
 | Built | What it is |
 |---|---|
 | `apps/channel/src/domain.ts` | **The core.** Every booking rule: capacity, duplicates, quota, the 24-hour rule, mentoring roles, progress, and transactional reschedule |
+| `apps/channel/src/services.ts` | The application layer both doors call — identity in, domain out, no rules of its own |
 | `apps/channel/src/db.ts` | SQLite schema and the constraints the database enforces itself |
-| `apps/channel/src/tools.tsx` | The nine agent tools |
+| `apps/channel/src/callbacks.ts` | The button payload grammar: stateless, parsed rather than registered |
+| `apps/channel/src/screens.tsx` | Every screen of the button product |
+| `apps/channel/src/router.tsx` | A tap in, a screen out |
+| `apps/channel/src/telegram-bot.ts` | Contact sharing and callback routing, on the adapter's own grammY bot |
+| `apps/channel/src/tools.tsx` | The nine agent tools, thin over the services |
 | `apps/channel/src/components.tsx` | The cards students see |
+| `apps/channel/src/strings.ts` | Every user-facing string, in one collection |
 | `apps/channel/src/identity.ts` | Roster linking and phone normalisation |
+| `apps/channel/src/calendar.ts`, `google-oauth.ts` | Google Calendar sync and its consent round trip |
 | `apps/channel/src/time.ts` | Kyiv-time conversion, DST-correct |
 | `apps/channel/src/reminders.ts` | The one-hour reminder scheduler |
 | `apps/channel/src/prompt.ts` | The agent's brief |
 | `apps/channel/src/seed.ts` | Roster, practice types, demo sessions |
-| `apps/channel/src/domain.test.ts` | 37 tests for the rules |
-| `apps/channel/src/telegram.test.tsx` | 12 tests for rendering and reminders |
-| `apps/channel/src/demo.tsx` | Scripted walkthrough, rendered as Telegram would |
+| `apps/channel/src/*.test.ts(x)` | 106 tests: the rules, both doors and their parity, the grammar, linking, the calendar, rendering |
+| `apps/channel/src/demo.tsx` | Scripted walkthrough — the button product, then the same system through the agent |
 | `apps/channel/src/channel.tsx` | **Rewritten.** Managed Slack → direct Telegram adapter |
 
 ## Title and description
@@ -58,14 +65,26 @@ Everything that makes this a practice coordinator. New files, ~2,300 lines:
 
 ### What you built
 
-A student writes «Потрібна практика наступного тижня після 18:00». The agent
-searches real sessions, filters to the ones with a free seat after 18:00 Kyiv
-time, and shows them as a Telegram card with booking buttons. The student says
-«Забронюй мене на першу»; the agent calls `book_practice`, which validates
-capacity, duplicate bookings, the annual quota, the 24-hour rule, and mentoring
-role availability before writing, and a confirmation card comes back with the
-session's own Zoom link. An hour before the session, the agent messages them
-first.
+A student sends `/start` and taps **Share my phone number** once. From then on
+Telegram *is* the login: they are recognised on every later interaction and are
+never asked again.
+
+Then the whole product is buttons. Find practice → a type → this week → a
+session → booked, with the session's own Zoom link on the confirmation. Progress,
+bookings, cancel, reschedule, and a group-mentoring screen where a taken coach
+seat is shown as text and only the free roles are tappable. **None of that calls
+a model.** Unset `OPENAI_API_KEY` and every one of those flows still works.
+
+The AI is the second door, for the same system. A student writes "I need a
+practice next week after 18:00"; the agent searches real sessions, filters to
+free seats after 18:00 Kyiv time, and posts the same card — whose buttons are
+routed by the same router. "Book me for the first one" calls `book_practice`,
+which goes through the same service as the button.
+
+Every booking validates capacity, duplicates, the annual quota, the 24-hour rule
+and mentoring roles before writing — in `domain.ts`, once. If the student has
+connected Google Calendar, the booking appears there and a cancellation removes
+it. An hour before the session, the bot messages them first.
 
 ### Who it is for
 
@@ -76,37 +95,43 @@ which ones they still need and which sessions have room.
 
 ### Why the context matters
 
-Remove Telegram and two things break:
+Remove Telegram and three things break:
 
 1. **The reminder has nowhere to arrive.** Nobody opens a booking site an hour
    before a session. The reminder is the feature that stops people missing
-   practices, and it only works because the agent can start a conversation.
+   practices, and it only works because the bot can start a conversation.
 2. **"Book me for Wednesday" stops resolving.** It is only meaningful because
    the options from the previous turn are still on screen. In a stateless form
    the student would have to name a session id.
+3. **There is no login to replace.** Telegram already knows who this is, and its
+   contact button hands over a *verified* phone number in one tap. A web app
+   would need an account, a password reset and a session; here the student is
+   identified once and never again.
 
-A standalone chatbox would lose both, and would still need the student to go
+A standalone chatbox would lose all three, and would still need the student to go
 somewhere they do not otherwise go.
 
 ### Sponsor technologies used
 
 | Sponsor | Visible contribution |
 |---|---|
-| **OpenAI** | The agent's understanding: parsing «наступного тижня після 18:00» into tool arguments, choosing the tool, and explaining a refusal in the student's language |
-| **CopilotKit** | Channels runs the agent in Telegram: its `@copilotkit/channels/telegram` adapter (grammY) handles ingress, renders our JSX cards as Telegram HTML and inline keyboards, and routes button clicks |
+| **OpenAI** | The second door: parsing "next week after 18:00" into tool arguments, choosing the tool, and explaining a refusal in the student's own words. Optional by design — the product works without it |
+| **CopilotKit** | Channels runs this in Telegram: its `@copilotkit/channels/telegram` adapter (grammY) handles ingress, and the JSX vocabulary renders every card and inline keyboard — for the button product as much as for the agent |
+| **Google Calendar** | A booked practice appears in the student's own calendar and a cancelled one disappears, through a per-student OAuth grant |
 
 Not used, deliberately: **Exa** (the agent must never state a fact it did not
-read from its own database, so it has no web search at all), **Ambiguous AI**, **Auth0** (students authenticate by being a known
-`telegram_user_id`).
+read from its own database, so it has no web search at all), **Ambiguous AI**,
+**Auth0** (Telegram is the identity: a student links once with a verified
+contact, and `telegram_user_id` is the credential from then on).
 
 ## Evidence for the judging criteria
 
 | Official criterion | Where to show it |
 |---|---|
-| Core Requirements & Functionality | The search → book → confirm flow in Telegram, ending in a booking card with a real Zoom link and a progress count that went up. `npm run demo --workspace channel` prints the whole sequence. |
-| Innovation & Theme Alignment | The reminder arriving unprompted, and the student replying "cancel it" in the same thread. Then the contrast above: what a standalone chatbox loses. |
-| Technical Execution & Integration | The refusal paths. Try to book beyond quota more than 24 hours out → refused with the time it becomes bookable. Try to move a booking onto a full session → refused, **and the original seat is kept** (`domain.test.ts`, "keeps the original booking when the new session is full"). |
-| Usefulness & Agentic Experience | Progress card, options with buttons, and the agent asking which mentoring role before booking rather than guessing. |
+| Core Requirements & Functionality | The find → book → confirm flow **driven by buttons with the model switched off**, ending in a booking card with a real Zoom link and a progress count that went up. Then the same flow by typing a sentence. `npm run demo --workspace channel` prints both. |
+| Innovation & Theme Alignment | Telegram as the login: one tap on Share my phone number, recognised forever after. Plus the reminder arriving unprompted and "cancel it" answered in the same thread. Then the contrast above. |
+| Technical Execution & Integration | The refusal paths, and that they are identical on both doors — `parity.test.tsx` asserts it. Book beyond quota more than 24 hours out → refused with the time it becomes bookable. Move a booking onto a full session → refused, **and the original seat is kept**. |
+| Usefulness & Agentic Experience | The group-mentoring screen: a taken coach seat is shown but not offered. Cancelling asks first. A booking lands in the student's real calendar. |
 
 - [x] We distinguish live services, sample data, session-only state, and standalone recipes
 - [ ] We can point to visible evidence for every criterion *(needs the live run below)*
@@ -130,7 +155,7 @@ Worth saying out loud in the demo, because it is the technical argument:
 
 - [x] A new participant can run the quickstart from a clean clone — see [apps/channel/README.md](apps/channel/README.md)
 - [x] The README lists the credentials and separate processes required
-- [x] `npm run verify` passes — 86 tests across both workspaces, 0 failures
+- [x] `npm run verify` passes — 143 tests across both workspaces, 0 failures
 - [x] `.env` is gitignored; no tokens in the repo
 - [x] Sample data is labeled: the roster, practice types, and sessions in `seed.ts` are fictional, generated relative to seed time
 
@@ -149,47 +174,73 @@ Then open Telegram, find your bot, send `/start`, and send `0501112233`.
 
 **Verified, offline, on this machine:**
 
-- `npm run verify` — 86 tests, 0 failures (37 agent-core, 49 channel)
-- `npm run demo --workspace channel` — the full sequence: link → search → book →
-  progress → role refusal → quota refusal beyond 24h → extra booking inside 24h
-  → reschedule → failed reschedule with the seat kept → cancel → reminder sent
-  with its Zoom button. Cards render through the real Telegram renderer.
+- `npm run verify` — 143 tests, 0 failures (37 agent-core, 106 channel)
+- **Both doors are asserted to agree.** `parity.test.tsx` runs full capacity,
+  duplicates, taken roles, a missing role, the quota and 24-hour rule, cancelling
+  and a failed reschedule through the button router *and* the agent's tools, and
+  asserts the same machine reason, the same sentence to the student, and the same
+  rows left behind. It also asserts one account cannot touch another's booking.
+- `npm run demo --workspace channel` — the button product first (menu → find →
+  book → progress → bookings → cancel → the mentoring roles screen), then the
+  same system through the tools: search → book → progress → role refusal → quota
+  refusal beyond 24h → extra booking inside 24h → reschedule → failed reschedule
+  with the seat kept → cancel → reminder with its Zoom button.
 - Telegram rendering is checked against the adapter's real `renderTelegram`,
-  including the 4096-character message cap and the 64-byte `callback_data` cap.
+  including the 4096-character message cap and the 64-byte `callback_data` cap —
+  an over-long payload is dropped *silently* by the adapter, so that one is a
+  test rather than a hope.
+- Calendar sync is driven against a fake Google: insert on booking, delete on
+  cancellation, both on a move, and — the one that matters — a booking survives
+  intact when Google is unreachable.
 
 **Not yet verified — needs credentials we do not have in this checkout:**
 
-- A real Telegram round-trip. The `.env` in this checkout has placeholder values
-  (`OPENAI_API_KEY=stub-replace-me`), so no live model call or bot connection has
-  been made.
+- A real Telegram round-trip, including the contact-share button. The `.env` in
+  this checkout has placeholder values (`OPENAI_API_KEY=stub-replace-me`), so no
+  live model call or bot connection has been made.
 - The model's tool selection. The walkthrough calls the tools in the order the
   agent is expected to choose; it does not prove the model chooses them.
+- The live Google consent screen and a real calendar write.
 
 ### Before recording
 
-1. Put a real `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `CHANNEL_CODE`, and
-   `INTELLIGENCE_API_KEY` in `.env`.
+1. Put a real `TELEGRAM_BOT_TOKEN`, `CHANNEL_CODE` and `INTELLIGENCE_API_KEY` in
+   `.env`. **Leave `OPENAI_API_KEY` unset for the first pass** — that is how you
+   prove the button product stands on its own.
 2. `npm run dev:telegram`. Confirm the console prints `Practice Agent online`.
    A warning that the Channel is not `online` is survivable — Telegram ingress is
    this process's own long-poll — but the Channel Code is worth fixing first.
-3. Run every step in [Try the flow](apps/channel/README.md#try-the-flow) in the
-   real Telegram client.
-4. For the reminder, seed fresh (`npm run seed`) and book the session that starts
-   in three hours; the reminder fires an hour before it. To see it sooner without
-   waiting, temporarily lower `leadMs` in `server.ts`.
-5. Then tick the two unchecked boxes above.
+3. Run steps 1–6 of [Try the flow](apps/channel/README.md#try-the-flow) in the
+   real Telegram client, with no model key. Check the contact button appears on
+   the actual demo phone; if a client does not offer it, the typed number still
+   works.
+4. Add `OPENAI_API_KEY`, restart, and run step 7.
+5. Optional, and only with a tunnel running: set `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET` and `PUBLIC_BASE_URL`, add your Google account as an
+   OAuth test user, then connect from the menu and watch a booking appear in
+   Google Calendar and vanish on cancellation.
+6. For the reminder, seed fresh (`npm run seed` — it keeps your Telegram link
+   now) and book the session that starts in three hours; the reminder fires an
+   hour before it. To see it sooner without waiting, temporarily lower `leadMs`
+   in `server.ts`.
+7. Then tick the unchecked boxes above.
 
 ## Two-minute demo video
 
-- [ ] Open on the Telegram chat with earlier messages visible, before any prompt
-- [ ] «Потрібна практика наступного тижня після 18:00» → options card
-- [ ] «Забронюй мене на першу» → confirmation card with the real Zoom link
-- [ ] Show a refusal: book beyond quota more than 24 hours out, and let the agent
-      explain when it becomes bookable. **This is the moment that shows the rules
-      are real rather than suggested.**
+- [ ] `/start` → tap **Share my phone number** → recognised. Then `/start` again
+      to show it never asks twice
+- [ ] Book a practice **entirely with buttons**, saying out loud that the model
+      is switched off
+- [ ] Open a group-mentoring session: the taken coach seat is shown but not
+      offered, and only free roles are tappable
+- [ ] Show a refusal: book beyond quota more than 24 hours out, and let it
+      explain when the seat becomes bookable. **This is the moment that shows the
+      rules are real rather than suggested.**
+- [ ] Now type «I need a practice next week after 18:00» and book by talking —
+      same card, same rules, one service underneath
 - [ ] Show the reminder arriving unprompted
-- [ ] Say that OpenAI does the understanding and CopilotKit Channels puts it in
-      Telegram
+- [ ] Say that OpenAI does the understanding, CopilotKit Channels puts it in
+      Telegram, and neither of them decides whether a booking is allowed
 - [ ] Keep within the event's limit and check audio
 
 ## Known limits
@@ -197,21 +248,26 @@ Then open Telegram, find your bot, send `/start`, and send `0501112233`.
 State these rather than letting a judge find them:
 
 - **Conversation history is in-memory.** The Telegram adapter's conversation
-  store does not survive a restart. Bookings, progress, and the roster are in
-  SQLite and do.
-- **Linking is a typed phone number, not Telegram contact sharing.** A
-  contact-share button is a Telegram reply-keyboard feature that the Channels JSX
-  vocabulary does not express, and inventing a component is the documented way to
-  break this SDK. A phone number typed in any common format is normalised and
-  matched against the roster; a number already claimed by another Telegram
-  account is refused rather than reassigned.
+  store does not survive a restart. Bookings, progress, the roster and the
+  Telegram links are in SQLite and do.
+- **Linking is Telegram's own contact button**, driven through the adapter's
+  grammY bot — the Channels JSX vocabulary has no reply keyboard, and a shared
+  contact never reaches the adapter at all. A forwarded contact card belonging to
+  someone else is refused; so is a roster number already claimed by another
+  Telegram account. A typed number remains as a fallback.
+- **Calendar sync is one-way and forward-only.** Bookings made before a student
+  connected Google are not backfilled, and we never read their calendar.
+- **The Google consent screen is unverified**, so only accounts added as OAuth
+  test users can connect. Fine for a demo, worth saying out loud.
 - **Booking is progress.** There is no attendance system, so an active booking
   counts as a completed practice, and cancelling gives the seat back to the
   quota. Called out in the progress card.
 - **Admin is seed-only.** A coordinator adds slots by editing `seed.ts` and
-  re-seeding. The brief ranked admin tenth; the student experience got the time.
-- **Inline buttons are in-process.** A button on a card posted before a restart
-  no longer resolves. Typing the request still works.
+  re-seeding (which now keeps everyone's Telegram link). The brief ranked admin
+  tenth; the student experience got the time.
+- **Button navigation is stateless, deliberately.** A button on a card posted
+  before a restart still resolves, because the screen is named in the payload
+  rather than looked up in a map that died with the process.
 - **One process, not serverless.** A Channel owns a long-lived connection, and
   the reminder scheduler needs to be running anyway.
 
